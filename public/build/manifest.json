@@ -1,0 +1,42 @@
+{
+  "node_modules/canvg/lib/index.es.js": {
+    "file": "assets/index.es--Cup_9n3.js",
+    "name": "index.es",
+    "src": "node_modules/canvg/lib/index.es.js",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/main.jsx"
+    ]
+  },
+  "node_modules/dompurify/dist/purify.es.mjs": {
+    "file": "assets/purify.es-CQJ0hv7W.js",
+    "name": "purify.es",
+    "src": "node_modules/dompurify/dist/purify.es.mjs",
+    "isDynamicEntry": true
+  },
+  "node_modules/html2canvas/dist/html2canvas.esm.js": {
+    "file": "assets/html2canvas.esm-CBrSDip1.js",
+    "name": "html2canvas.esm",
+    "src": "node_modules/html2canvas/dist/html2canvas.esm.js",
+    "isDynamicEntry": true
+  },
+  "resources/js/index.css": {
+    "file": "assets/index-BVpODHVr.css",
+    "src": "resources/js/index.css",
+    "isEntry": true
+  },
+  "resources/js/main.jsx": {
+    "file": "assets/main-CPzsAcv9.js",
+    "name": "main",
+    "src": "resources/js/main.jsx",
+    "isEntry": true,
+    "dynamicImports": [
+      "node_modules/html2canvas/dist/html2canvas.esm.js",
+      "node_modules/dompurify/dist/purify.es.mjs",
+      "node_modules/canvg/lib/index.es.js"
+    ],
+    "css": [
+      "assets/index-BVpODHVr.css"
+    ]
+  }
+}

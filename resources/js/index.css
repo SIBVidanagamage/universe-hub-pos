@@ -1,0 +1,99 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 84% 4.9%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 94.0%;
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-cosmic-bg text-white;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif;
+    letter-spacing: -0.01em;
+  }
+}
+
+body {
+  /* Deep Space Background */
+  background-color: #090B10;
+  color: #FFFFFF;
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Cosmic Liquid Glass Effect */
+.glass-effect {
+  background: rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(32px) saturate(200%);
+  -webkit-backdrop-filter: blur(32px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid rgba(255, 255, 255, 0.15); /* Titanium Shine */
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(255,255,255,0.02);
+  border-radius: 24px; /* iOS 26 Rounded Corners */
+}
+
+/* Liquid Button Hover */
+.liquid-button {
+  transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+}
+.liquid-button:hover {
+  transform: scale(1.02);
+  box-shadow: 0 0 20px rgba(0, 122, 255, 0.4);
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, #D9D9D9, #FFFFFF);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.card-hover {
+  transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.barcode-container {
+  background: rgba(255,255,255,0.9);
+  padding: 10px;
+  border-radius: 12px;
+  display: inline-block;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.barcode-container svg {
+  display: block;
+}
