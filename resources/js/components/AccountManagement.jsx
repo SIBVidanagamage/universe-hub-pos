@@ -10,26 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/ui/use-toast';
-
-const apiRequest = async (url, token, options = {}) => {
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-      ...options.headers,
-    },
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const message = errorData.message || Object.values(errorData.errors || {})?.[0]?.[0] || `Request failed with status ${response.status}`;
-    throw new Error(message);
-  }
-
-  return response.json();
-};
+import { supabase } from '@/lib/supabase';
 
 const today = format(new Date(), 'yyyy-MM-dd');
 const thisMonth = format(new Date(), 'yyyy-MM');
@@ -64,9 +45,40 @@ export function AccountManagement() {
     if (!token) return;
     setLoading(true);
     try {
-      const data = await apiRequest(`/api/v1/cash-transactions?${queryString}`, token);
-      setTransactions(data.transactions || []);
-      setSummary(data.summary || { cash_in: 0, cash_out: 0, net_cash: 0, transactions_count: 0 });
+      let query = supabase.from('cash_transactions').select(`*, user:user_id(name)`);
+
+      if (period === 'daily') {
+        const start = `${date}T00:00:00.000Z`;
+        const end = `${date}T23:59:59.999Z`;
+        query = query.gte('created_at', start).lte('created_at', end);
+      } else if (period === 'monthly') {
+        const year = month.split('-')[0];
+        const m = month.split('-')[1];
+        const start = new Date(year, m - 1, 1).toISOString();
+        const end = new Date(year, m, 0, 23, 59, 59).toISOString();
+        query = query.gte('created_at', start).lte('created_at', end);
+      }
+
+      if (typeFilter !== 'all') {
+        query = query.eq('type', typeFilter);
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: false });
+      if (error) throw error;
+      
+      const txData = data || [];
+      setTransactions(txData);
+
+      let cash_in = 0;
+      let cash_out = 0;
+      let transactions_count = txData.length;
+
+      txData.forEach(t => {
+          if (t.type === 'cash_in') cash_in += parseFloat(t.amount);
+          else if (t.type === 'cash_out') cash_out += parseFloat(t.amount);
+      });
+      
+      setSummary({ cash_in, cash_out, net_cash: cash_in - cash_out, transactions_count });
     } catch (error) {
       toast({ title: 'Account Data Failed', description: error.message, variant: 'destructive' });
     } finally {
@@ -91,15 +103,16 @@ export function AccountManagement() {
     }
 
     try {
-      await apiRequest('/api/v1/cash-transactions', token, {
-        method: 'POST',
-        body: JSON.stringify({
-          type: form.type,
-          amount,
-          reason: form.reason.trim() || null,
-          notes: form.notes.trim() || null,
-        }),
-      });
+      const payload = {
+        type: form.type,
+        amount,
+        reason: form.reason.trim() || null,
+        notes: form.notes.trim() || null,
+      };
+      
+      const { error } = await supabase.from('cash_transactions').insert([payload]);
+      if (error) throw error;
+
       setForm({ type: 'cash_in', amount: '', reason: '', notes: '' });
       await fetchTransactions();
       toast({ title: 'Cash Entry Saved', description: `${form.type === 'cash_in' ? 'Cash in' : 'Cash out'} recorded.` });

@@ -1,27 +1,7 @@
 import { useState, useEffect, createContext, useContext, useCallback } from 'react';
-import { useAuth } from '@/hooks/useAuth'; // To get the auth token
-
-// Create a context for staff data
-const StaffContext = createContext(null);
-
-// API helper function
-const fetchWithAuth = async (url, options = {}, token) => {
-    const headers = {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        ...options.headers,
-    };
-
-    const response = await fetch(url, { ...options, headers });
-
-    if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-    }
-    // For 204 No Content, response.json() will fail
-    return response.status === 204 ? null : response.json();
-};
+import { useAuth } from '@/hooks/useAuth'; 
+import { supabase } from '@/lib/supabase';
+import bcrypt from 'bcryptjs';
 
 
 // The provider component
@@ -34,7 +14,11 @@ export const StaffProvider = ({ children }) => {
         if (!token) return;
         setLoading(true);
         try {
-            const data = await fetchWithAuth('/api/v1/staff', {}, token);
+            const { data, error } = await supabase
+                .from('users')
+                .select('*')
+                .order('created_at', { ascending: false });
+            if (error) throw error;
             setStaff(data);
         } catch (error) {
             console.error("Failed to fetch staff:", error);
@@ -48,30 +32,48 @@ export const StaffProvider = ({ children }) => {
     }, [fetchStaff]);
 
     const addStaff = async (staffData) => {
-        const data = await fetchWithAuth('/api/v1/staff', {
-            method: 'POST',
-            body: JSON.stringify(staffData),
-        }, token);
-        // Add new staff to the local state to update UI instantly
-        setStaff(prevStaff => [...prevStaff, data]);
-        return data; // Return the created user data
+        // Hash password before inserting
+        let password = staffData.password;
+        if (password) {
+            const salt = await bcrypt.genSalt(10);
+            password = await bcrypt.hash(password, salt);
+        }
+        
+        const payload = {
+            name: staffData.name,
+            email: staffData.email,
+            password: password,
+            role: staffData.role || 'cashier',
+            phone: staffData.phone,
+        };
+
+        const { data, error } = await supabase.from('users').insert([payload]).select().single();
+        if (error) throw error;
+        
+        setStaff(prevStaff => [data, ...prevStaff]);
+        return data;
     };
 
     const updateStaff = async (staffId, staffData) => {
-        const data = await fetchWithAuth(`/api/v1/staff/${staffId}`, {
-            method: 'PUT',
-            body: JSON.stringify(staffData),
-        }, token);
-        // Update the user in the local state
+        const payload = { ...staffData };
+        if (payload.password) {
+            const salt = await bcrypt.genSalt(10);
+            payload.password = await bcrypt.hash(payload.password, salt);
+        } else {
+            delete payload.password;
+        }
+
+        const { data, error } = await supabase.from('users').update(payload).eq('id', staffId).select().single();
+        if (error) throw error;
+        
         setStaff(prevStaff => prevStaff.map(s => (s.id === staffId ? data : s)));
         return data;
     };
 
     const deleteStaff = async (staffId) => {
-        await fetchWithAuth(`/api/v1/staff/${staffId}`, {
-            method: 'DELETE',
-        }, token);
-        // Remove the user from the local state
+        const { error } = await supabase.from('users').delete().eq('id', staffId);
+        if (error) throw error;
+        
         setStaff(prevStaff => prevStaff.filter(s => s.id !== staffId));
     };
 

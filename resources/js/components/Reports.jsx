@@ -106,7 +106,7 @@ export function Reports() {
     const searchedSales = sales.filter(sale => {
         const term = searchTerm.toLowerCase();
         const customerMatch = sale.customer_name?.toLowerCase().includes(term);
-        const invoiceMatch = sale.id.toString().includes(term);
+        const invoiceMatch = sale.id?.toString().includes(term);
         return customerMatch || invoiceMatch;
     });
 

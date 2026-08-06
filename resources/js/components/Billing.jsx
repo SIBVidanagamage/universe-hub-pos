@@ -13,7 +13,7 @@ import { useQZ } from '@/hooks/useQZ';
 import { useAuth } from '@/hooks/useAuth';
 import { ShoppingCart, Plus, Minus, Trash2, Receipt, History, Printer, Smartphone } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import axios from 'axios';
+import { supabase } from '@/lib/supabase';
 
 export function Billing() {
   const { inventory } = useInventory();
@@ -57,12 +57,14 @@ export function Billing() {
       if (!query || query.length < 4) return; // Only search if length >= 4
 
       try {
-        const response = await axios.get(`/api/v1/customers/search?query=${encodeURIComponent(query)}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (response.status === 200) {
-          const data = response.data;
-          if (data) {
+        const { data, error } = await supabase
+          .from('customers')
+          .select('*')
+          .or(`phone.ilike.%${query}%,email.ilike.%${query}%`)
+          .limit(1)
+          .maybeSingle();
+
+        if (data && !error) {
             // Only auto-fill if the current fields are empty or match the typed query
             // to avoid overwriting user input constantly
             if (!customerName || customerName === data.name.replace(/^(Mr\.|Mrs\.|Miss|Dr\.)\s+/, '')) {
@@ -76,7 +78,6 @@ export function Billing() {
             }
             if (!customerEmail && data.email) setCustomerEmail(data.email);
             if (!customerPhone && data.phone) setCustomerPhone(data.phone);
-          }
         }
       } catch (error) {
         console.error("Error searching customer", error);
@@ -434,14 +435,7 @@ export function Billing() {
     for (const item of cart) {
       const itemCodes = (item.itemCodes || []).map(code => code.trim()).filter(Boolean);
 
-      if (item.type === 'product' && item.warrantyPeriod > 0 && itemCodes.length !== item.quantity) {
-        toast({
-          title: "Unit Barcode Required",
-          description: `Enter ${item.quantity} unit barcode/serial number${item.quantity > 1 ? 's' : ''} for ${item.name}.`,
-          variant: "destructive",
-        });
-        return;
-      }
+      // Validation removed to make unit barcodes optional
 
       for (const code of itemCodes) {
         if (enteredUnitCodes.includes(code)) {
@@ -483,6 +477,51 @@ export function Billing() {
 
     try {
       const newSaleData = await addSale(salePayload);
+
+      // Send Email via local Nodemailer server
+      if (salePayload.sendEmailReceipt && salePayload.customerEmail) {
+        try {
+          // Generate a simple HTML table for the cart items
+          let itemsHtml = '<table border="1" cellpadding="5" style="border-collapse: collapse; width: 100%; margin-top: 20px;">';
+          itemsHtml += '<tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr>';
+          cart.forEach(item => {
+            const itemTotal = (item.quantity * item.sellingPrice) - (parseFloat(item.discount) * item.quantity);
+            itemsHtml += `<tr><td>${item.name}</td><td>${item.quantity}</td><td>LKR ${item.sellingPrice}</td><td>LKR ${itemTotal}</td></tr>`;
+          });
+          itemsHtml += '</table>';
+
+          const htmlReceipt = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #4f46e5;">UNIVERSE HUB</h2>
+              <h3>Receipt for Your Purchase</h3>
+              <p>Dear ${salePayload.customerName},</p>
+              <p>Thank you for shopping with us! Here are your purchase details:</p>
+              ${itemsHtml}
+              <h3 style="margin-top: 20px;"><strong>Grand Total: LKR ${newSaleData.total}</strong></h3>
+              <p>Date: ${new Date().toLocaleString()}</p>
+              <p style="font-size: 12px; color: #888;">For any inquiries or warranty claims, please bring this email or your printed receipt.</p>
+            </div>
+          `;
+          
+          const response = await fetch('http://127.0.0.1:3001/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              to: salePayload.customerEmail,
+              subject: 'Your Receipt - Universe Hub',
+              html: htmlReceipt
+            })
+          });
+          
+          if (!response.ok) throw new Error('Email server returned ' + response.status);
+          
+          newSaleData.receipt_emailed_at = new Date().toISOString();
+        } catch (e) {
+          console.error("Email sending failed:", e);
+          newSaleData.receipt_email_error = 'Email failed: ' + e.message;
+        }
+      }
+
       toast({
         title: "Sale Recorded",
         description: newSaleData.receipt_emailed_at
@@ -593,10 +632,10 @@ export function Billing() {
                         {(item.productType === 'phone' || item.warrantyPeriod > 0) && (
                           <div className="mt-3 space-y-2">
                             <p className="text-xs font-medium text-gray-300">
-                              Sold Unit Barcode / Serial Numbers
-                              <span className="text-red-300"> *</span>
+                              Sold Unit Barcode / Serial Numbers (Optional)
                             </p>
                             {(item.itemCodes || []).map((code, codeIndex) => (
+
                               <Input
                                 key={`${item.uniqueCartId}-code-${codeIndex}`}
                                 value={code}

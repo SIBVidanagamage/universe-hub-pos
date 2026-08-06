@@ -6,53 +6,31 @@ const AuthContext = createContext(null);
 
 // Create a provider component that will wrap your application
 export const AuthProvider = ({ children }) => {
-    const [user, setUser] = useState(null);
-    // Get the token from localStorage on initial load
+    // Get the user from localStorage on initial load
+    const [user, setUser] = useState(() => {
+        const storedUser = localStorage.getItem('authUser');
+        return storedUser ? JSON.parse(storedUser) : null;
+    });
     const [token, setToken] = useState(localStorage.getItem('authToken'));
     const [loading, setLoading] = useState(true);
     const navigate = useNavigate();
 
     useEffect(() => {
-        // This effect runs when the component mounts or the token changes.
-        // If a token exists, it fetches the user's profile to verify the token
-        // and get up-to-date user information.
-        const fetchUser = async () => {
-            if (token) {
-                try {
-                    const response = await fetch('/api/user', {
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                            'Accept': 'application/json',
-                        },
-                    });
-                    if (response.ok) {
-                        const userData = await response.json();
-                        setUser(userData);
-                    } else {
-                        // If token is invalid, clear it
-                        localStorage.removeItem('authToken');
-                        setToken(null);
-                        setUser(null);
-                    }
-                } catch (error) {
-                    console.error("Failed to fetch user:", error);
-                    localStorage.removeItem('authToken');
-                    setToken(null);
-                    setUser(null);
-                }
-            }
-            setLoading(false);
-        };
+        // Since we are not using an API session, we just rely on localStorage
+        if (!token || !user) {
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('authUser');
+            setToken(null);
+            setUser(null);
+        }
+        setLoading(false);
+    }, [token, user]);
 
-        fetchUser();
-    }, [token]);
-
-    // The login function to be called from the Login component
     const login = (authData) => {
-        // authData is the response from your Laravel /api/login endpoint
         localStorage.setItem('authToken', authData.token);
+        localStorage.setItem('authUser', JSON.stringify(authData.user));
         setToken(authData.token);
-        // REMOVED: setUser(authData.user); - This was the cause of the issue.
+        setUser(authData.user);
 
         // *** This is where the navigation happens ***
         navigate('/dashboard');
@@ -60,18 +38,9 @@ export const AuthProvider = ({ children }) => {
 
     // The logout function
     const logout = async () => {
-        if (token) {
-            try {
-                await fetch('/api/logout', {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}` },
-                });
-            } catch (error) {
-                console.error("API logout failed, logging out client-side.", error);
-            }
-        }
         // Clear local state and storage
         localStorage.removeItem('authToken');
+        localStorage.removeItem('authUser');
         setToken(null);
         setUser(null);
         navigate('/login'); // Navigate back to the login page

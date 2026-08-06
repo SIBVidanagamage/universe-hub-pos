@@ -1,6 +1,5 @@
 import React from 'react';
 import { Routes, Route, Navigate, useLocation, Outlet } from 'react-router-dom';
-import { Helmet } from 'react-helmet';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Toaster } from '@/components/ui/toaster';
 import { Login } from '@/components/Login';
@@ -87,9 +86,6 @@ function App() {
 
     return (
         <>
-            <Helmet>
-                <title>UNIVERSE HUB</title>
-            </Helmet>
             <Routes>
                 <Route path="/login" element={<Login onLogin={login} />} />
 

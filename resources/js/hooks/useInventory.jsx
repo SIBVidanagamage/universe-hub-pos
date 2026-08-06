@@ -1,21 +1,6 @@
 import { useState, useEffect, useCallback, createContext, useContext } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-
-// Helper function to handle authenticated API requests
-const fetchWithAuth = async (url, options = {}, token) => {
-    const headers = {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        ...options.headers,
-    };
-    const response = await fetch(url, { ...options, headers });
-    if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-    }
-    return response.status === 204 ? null : response.json();
-};
+import { supabase } from '@/lib/supabase';
 
 // Helper to map backend snake_case to frontend camelCase
 const mapProductToFrontend = (product) => ({
@@ -52,6 +37,7 @@ const mapProductToBackend = (product) => ({
     phone_imei: product.productType === 'phone' ? product.phoneImei : null,
     phone_storage: product.productType === 'phone' ? product.phoneStorage : null,
     sku: product.sku,
+    barcode: product.barcode || product.sku,
     serial_number: product.serialNumber,
     quantity: product.quantity,
     supplier: product.supplier,
@@ -73,7 +59,8 @@ export const InventoryProvider = ({ children }) => {
         if (token) {
             setLoading(true);
             try {
-                const data = await fetchWithAuth('/api/v1/products', {}, token);
+                const { data, error } = await supabase.from('products').select('*').order('created_at', { ascending: false });
+                if (error) throw error;
                 setInventory(data.map(mapProductToFrontend));
             } catch (error) {
                 console.error("Failed to fetch inventory:", error);
@@ -88,33 +75,26 @@ export const InventoryProvider = ({ children }) => {
     }, [token]);
 
     useEffect(() => {
-        // This effect's logic is now simpler and more robust.
-        // It will run whenever the authentication token changes.
         refreshInventory();
-    }, [refreshInventory]); // The hook now ONLY depends on the token-backed refresh callback.
+    }, [refreshInventory]);
 
     const addItem = async (itemData) => {
         const backendData = mapProductToBackend(itemData);
-        const newItem = await fetchWithAuth('/api/v1/products', {
-            method: 'POST',
-            body: JSON.stringify(backendData),
-        }, token);
-        setInventory(prev => [...prev, mapProductToFrontend(newItem)]);
+        const { data, error } = await supabase.from('products').insert([backendData]).select();
+        if (error) throw error;
+        setInventory(prev => [mapProductToFrontend(data[0]), ...prev]);
     };
 
     const updateItem = async (itemId, itemData) => {
         const backendData = mapProductToBackend(itemData);
-        const updatedItem = await fetchWithAuth(`/api/v1/products/${itemId}`, {
-            method: 'PUT',
-            body: JSON.stringify(backendData),
-        }, token);
-        setInventory(prev => prev.map(item => item.id === itemId ? mapProductToFrontend(updatedItem) : item));
+        const { data, error } = await supabase.from('products').update(backendData).eq('id', itemId).select();
+        if (error) throw error;
+        setInventory(prev => prev.map(item => item.id === itemId ? mapProductToFrontend(data[0]) : item));
     };
 
     const deleteItem = async (itemId) => {
-        await fetchWithAuth(`/api/v1/products/${itemId}`, {
-            method: 'DELETE',
-        }, token);
+        const { error } = await supabase.from('products').delete().eq('id', itemId);
+        if (error) throw error;
         setInventory(prev => prev.filter(item => item.id !== itemId));
     };
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
+import { supabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from './useAuth';
 
@@ -12,10 +12,12 @@ export function useCustomers() {
     const fetchCustomers = useCallback(async () => {
         try {
             setLoading(true);
-            const response = await axios.get('/api/v1/customers', {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setCustomers(response.data);
+            const { data, error } = await supabase
+                .from('customers')
+                .select('*')
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            setCustomers(data);
         } catch (error) {
             console.error('Failed to fetch customers:', error);
             toast({
@@ -36,9 +38,8 @@ export function useCustomers() {
 
     const addCustomer = async (data) => {
         try {
-            await axios.post('/api/v1/customers', data, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const { error } = await supabase.from('customers').insert([data]);
+            if (error) throw error;
             toast({ title: 'Success', description: 'Customer added successfully.' });
             fetchCustomers();
             return true;
@@ -46,7 +47,7 @@ export function useCustomers() {
             console.error('Add customer error:', error);
             toast({
                 title: 'Error',
-                description: error.response?.data?.message || 'Failed to add customer.',
+                description: error.message || 'Failed to add customer.',
                 variant: 'destructive',
             });
             return false;
@@ -55,9 +56,8 @@ export function useCustomers() {
 
     const updateCustomer = async (id, data) => {
         try {
-            await axios.put(`/api/v1/customers/${id}`, data, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const { error } = await supabase.from('customers').update(data).eq('id', id);
+            if (error) throw error;
             toast({ title: 'Success', description: 'Customer updated successfully.' });
             fetchCustomers();
             return true;
@@ -65,7 +65,7 @@ export function useCustomers() {
             console.error('Update customer error:', error);
             toast({
                 title: 'Error',
-                description: error.response?.data?.message || 'Failed to update customer.',
+                description: error.message || 'Failed to update customer.',
                 variant: 'destructive',
             });
             return false;
@@ -74,9 +74,8 @@ export function useCustomers() {
 
     const deleteCustomer = async (id) => {
         try {
-            await axios.delete(`/api/v1/customers/${id}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const { error } = await supabase.from('customers').delete().eq('id', id);
+            if (error) throw error;
             toast({ title: 'Success', description: 'Customer deleted successfully.' });
             fetchCustomers();
             return true;
@@ -84,7 +83,7 @@ export function useCustomers() {
             console.error('Delete customer error:', error);
             toast({
                 title: 'Error',
-                description: error.response?.data?.message || 'Failed to delete customer.',
+                description: error.message || 'Failed to delete customer.',
                 variant: 'destructive',
             });
             return false;

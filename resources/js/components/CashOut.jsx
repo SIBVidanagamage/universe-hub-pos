@@ -6,26 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/ui/use-toast';
-
-const apiRequest = async (url, token, options = {}) => {
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-      ...options.headers,
-    },
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const message = errorData.message || Object.values(errorData.errors || {})?.[0]?.[0] || `Request failed with status ${response.status}`;
-    throw new Error(message);
-  }
-
-  return response.json();
-};
+import { supabase } from '@/lib/supabase';
 
 export function CashOut() {
   const { token, user } = useAuth();
@@ -50,15 +31,16 @@ export function CashOut() {
 
     setSaving(true);
     try {
-      const entry = await apiRequest('/api/v1/cash-transactions', token, {
-        method: 'POST',
-        body: JSON.stringify({
-          type: 'cash_out',
-          amount,
-          reason: form.reason.trim(),
-          notes: form.notes.trim() || null,
-        }),
-      });
+      const payload = {
+        type: 'cash_out',
+        amount,
+        reason: form.reason.trim(),
+        notes: form.notes.trim() || null,
+        user_id: user?.id,
+      };
+      const { data: entry, error } = await supabase.from('cash_transactions').insert([payload]).select().single();
+      if (error) throw error;
+      
       setLastEntry(entry);
       setForm({ amount: '', reason: '', notes: '' });
       toast({ title: 'Cash Out Saved', description: 'The cash out entry is now available to admin accounts.' });

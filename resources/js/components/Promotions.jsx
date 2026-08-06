@@ -4,8 +4,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/ui/use-toast';
+import { supabase } from '@/lib/supabase';
 
 export function Promotions() {
     const { token } = useAuth();
@@ -23,6 +25,11 @@ export function Promotions() {
     const [image, setImage] = useState(null);
     const [sending, setSending] = useState(false);
 
+    // Inbox State
+    const [inboxEmails, setInboxEmails] = useState([]);
+    const [loadingInbox, setLoadingInbox] = useState(false);
+    const [selectedEmail, setSelectedEmail] = useState(null);
+
     useEffect(() => {
         fetchSettings();
     }, [token]);
@@ -30,17 +37,14 @@ export function Promotions() {
     const fetchSettings = async () => {
         if (!token) return;
         try {
-            const response = await fetch('/api/v1/settings/email', {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Accept': 'application/json'
-                }
-            });
-            if (response.ok) {
-                const data = await response.json();
+            const { data, error } = await supabase.from('settings').select('value').eq('key', 'email_config').single();
+            if (error) {
+                // Ignore if not found
+                if (error.code !== 'PGRST116') throw error;
+            } else if (data && data.value) {
                 setEmailConfig({
-                    email: data.MAIL_USERNAME || '',
-                    password: data.MAIL_PASSWORD || ''
+                    email: data.value.MAIL_USERNAME || '',
+                    password: data.value.MAIL_PASSWORD || ''
                 });
             }
         } catch (error) {
@@ -52,21 +56,18 @@ export function Promotions() {
         e.preventDefault();
         setSavingSettings(true);
         try {
-            const response = await fetch('/api/v1/settings/email', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                    'Accept': 'application/json'
-                },
-                body: JSON.stringify(emailConfig)
-            });
-            const data = await response.json();
-            if (response.ok) {
-                toast({ title: 'Success', description: 'Email settings saved successfully.' });
-            } else {
-                throw new Error(data.message || 'Failed to save settings');
-            }
+            const payload = {
+                key: 'email_config',
+                value: {
+                    MAIL_USERNAME: emailConfig.email,
+                    MAIL_PASSWORD: emailConfig.password
+                }
+            };
+            // Upsert setting
+            const { error } = await supabase.from('settings').upsert([payload], { onConflict: 'key' });
+            if (error) throw error;
+            
+            toast({ title: 'Success', description: 'Email settings saved successfully.' });
         } catch (error) {
             toast({ title: 'Error', description: error.message, variant: 'destructive' });
         } finally {
@@ -83,56 +84,126 @@ export function Promotions() {
 
         setSending(true);
         try {
-            const formData = new FormData();
-            formData.append('subject', promo.subject);
-            formData.append('message', promo.message);
-            if (image) {
-                formData.append('image', image);
+            // Fetch all unique customer emails from Supabase
+            const { data: customers, error } = await supabase
+                .from('customers')
+                .select('email')
+                .not('email', 'is', null)
+                .neq('email', '');
+
+            if (error) throw error;
+
+            const emails = [...new Set(customers.map(c => c.email))];
+            
+            if (emails.length === 0) {
+                toast({ title: 'Warning', description: 'No customers with email addresses found.', variant: 'destructive' });
+                setSending(false);
+                return;
             }
 
-            const response = await fetch('/api/v1/promotions/send', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Accept': 'application/json'
-                },
-                body: formData
-            });
-            const data = await response.json();
-            
-            if (response.ok) {
-                toast({ title: 'Success', description: data.message });
-                setPromo({ subject: '', message: '' });
-                setImage(null);
-                // Reset file input by clearing its value
-                const fileInput = document.getElementById('image');
-                if (fileInput) fileInput.value = '';
-            } else {
-                throw new Error(data.message || 'Failed to send promotions');
+            // Convert newline to HTML breaks for the message
+            const htmlMessage = promo.message.replace(/\n/g, '<br/>');
+
+            // Process image to Base64 if attached
+            let base64Image = null;
+            let imageFileName = null;
+            if (image) {
+                base64Image = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = error => reject(error);
+                    reader.readAsDataURL(image);
+                });
+                imageFileName = image.name;
             }
+
+            const htmlContent = `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f9f9f9; padding: 20px; border-radius: 10px;">
+                    <h2 style="color: #4f46e5; text-align: center;">UNIVERSE HUB</h2>
+                    <h3 style="text-align: center; color: #333;">${promo.subject}</h3>
+                    ${base64Image ? '<div style="text-align: center; margin-bottom: 20px;"><img src="cid:promo-image" style="max-width: 100%; border-radius: 8px;" alt="Promotion Image" /></div>' : ''}
+                    <div style="background-color: #ffffff; padding: 20px; border-radius: 8px; font-size: 16px; color: #444; line-height: 1.5;">
+                        <p>${htmlMessage}</p>
+                    </div>
+                    <p style="text-align: center; font-size: 12px; color: #999; margin-top: 20px;">
+                        You are receiving this email because you are a valued customer of Universe Hub.<br/>
+                        For inquiries, please contact us.
+                    </p>
+                </div>
+            `;
+
+            const response = await fetch('http://127.0.0.1:3001/api/send-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    bcc: emails.join(','),
+                    subject: promo.subject,
+                    html: htmlContent,
+                    image: base64Image,
+                    imageFileName: imageFileName
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('Email server returned ' + response.status);
+            }
+            
+            toast({ title: 'Success', description: `Promotion successfully sent to ${emails.length} customers!` });
+            setPromo({ subject: '', message: '' });
+            setImage(null);
+            const fileInput = document.getElementById('image');
+            if (fileInput) fileInput.value = '';
         } catch (error) {
-            toast({ title: 'Error', description: error.message, variant: 'destructive' });
+            console.error("Promotion Error:", error);
+            toast({ title: 'Error', description: error.message || 'Failed to send promotion.', variant: 'destructive' });
         } finally {
             setSending(false);
         }
     };
+
+    const fetchInbox = async () => {
+        setLoadingInbox(true);
+        try {
+            const response = await fetch('http://127.0.0.1:3001/api/inbox');
+            if (!response.ok) throw new Error('Failed to fetch inbox');
+            const data = await response.json();
+            setInboxEmails(data);
+        } catch (error) {
+            toast({ title: 'Inbox Error', description: error.message, variant: 'destructive' });
+        } finally {
+            setLoadingInbox(false);
+        }
+    };
+
+    // Auto-fetch inbox when tab becomes active
+    useEffect(() => {
+        if (activeTab === 'inbox') {
+            fetchInbox();
+        }
+    }, [activeTab]);
 
     return (
         <div className="space-y-6 max-w-4xl mx-auto">
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-4xl font-bold tracking-tight text-white drop-shadow-md">Promotions & Marketing</h1>
-                    <p className="text-cosmic-titanium mt-1 text-lg">Send marketing emails and configure email settings</p>
+                    <p className="text-cosmic-titanium mt-1 text-lg">Send marketing emails and read customer replies</p>
                 </div>
             </div>
 
             <div className="w-full">
-                <div className="grid w-full grid-cols-2 bg-white/5 border border-white/10 rounded-2xl p-1 mb-6">
+                <div className="grid w-full grid-cols-3 bg-white/5 border border-white/10 rounded-2xl p-1 mb-6">
                     <button 
                         onClick={() => setActiveTab('send')}
                         className={`flex items-center justify-center py-3 px-4 rounded-xl transition-all text-sm font-medium ${activeTab === 'send' ? 'bg-gradient-to-r from-cosmic-blue to-cosmic-purple text-white shadow-[0_0_15px_rgba(123,97,255,0.4)] border border-white/20' : 'text-cosmic-titanium hover:text-white hover:bg-white/5'}`}
                     >
                         <Send className="w-4 h-4 mr-2" /> Send Promotion
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('inbox')}
+                        className={`flex items-center justify-center py-3 px-4 rounded-xl transition-all text-sm font-medium ${activeTab === 'inbox' ? 'bg-gradient-to-r from-cosmic-blue to-cosmic-purple text-white shadow-[0_0_15px_rgba(123,97,255,0.4)] border border-white/20' : 'text-cosmic-titanium hover:text-white hover:bg-white/5'}`}
+                    >
+                        <Mail className="w-4 h-4 mr-2" /> Inbox (Replies)
                     </button>
                     <button 
                         onClick={() => setActiveTab('settings')}
@@ -276,7 +347,77 @@ export function Promotions() {
                         </Card>
                     </div>
                 )}
+
+                {activeTab === 'inbox' && (
+                    <div className="mt-4">
+                        <Card className="glass-effect shadow-xl">
+                            <CardHeader>
+                                <CardTitle className="text-2xl text-white flex items-center gap-2">
+                                    <Mail className="w-6 h-6 text-cosmic-blue" /> Customer Replies
+                                </CardTitle>
+                                <CardDescription className="text-cosmic-titanium text-base">
+                                    Recent emails in your shop's Gmail inbox.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                {loadingInbox ? (
+                                    <div className="text-center py-8 text-cosmic-titanium animate-pulse">
+                                        Loading emails from Gmail...
+                                    </div>
+                                ) : inboxEmails.length === 0 ? (
+                                    <div className="text-center py-8 text-cosmic-titanium">
+                                        No emails found.
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {inboxEmails.map((email) => (
+                                            <div 
+                                                key={email.id} 
+                                                onClick={() => setSelectedEmail(email)}
+                                                className="bg-white/5 border border-white/10 p-4 rounded-xl cursor-pointer hover:bg-white/10 transition-colors"
+                                            >
+                                                <div className="flex justify-between items-start mb-1">
+                                                    <h3 className="text-white font-semibold truncate flex-1">{email.subject || '(No Subject)'}</h3>
+                                                    <span className="text-xs text-cosmic-titanium ml-4 shrink-0">
+                                                        {new Date(email.date).toLocaleDateString()}
+                                                    </span>
+                                                </div>
+                                                <div className="text-sm text-gray-300 truncate mb-1">From: {email.from}</div>
+                                                <div className="text-xs text-gray-500 truncate">{email.snippet}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </div>
+                )}
             </div>
+
+            {/* Email Reader Dialog */}
+            <Dialog open={!!selectedEmail} onOpenChange={(open) => !open && setSelectedEmail(null)}>
+                <DialogContent className="glass-effect border-white/20 max-w-3xl max-h-[80vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="text-xl text-white">{selectedEmail?.subject || '(No Subject)'}</DialogTitle>
+                        <DialogDescription className="text-cosmic-titanium">
+                            From: {selectedEmail?.from} <br/>
+                            Date: {selectedEmail ? new Date(selectedEmail.date).toLocaleString() : ''}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="mt-4 p-4 bg-white/5 border border-white/10 rounded-xl text-white">
+                        {selectedEmail?.html ? (
+                            <div className="email-html-content" dangerouslySetInnerHTML={{ __html: selectedEmail.html }} />
+                        ) : (
+                            <pre className="whitespace-pre-wrap font-sans text-sm">{selectedEmail?.text}</pre>
+                        )}
+                    </div>
+                    <div className="mt-4 flex justify-end">
+                        <Button variant="outline" onClick={() => setSelectedEmail(null)} className="border-white/20 text-white">
+                            Close
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

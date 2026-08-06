@@ -12,25 +12,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useInventory } from '@/hooks/useInventory';
 import { useSales } from '@/hooks/useSales';
 import { useToast } from '@/components/ui/use-toast';
-
-const apiRequest = async (url, token, options = {}) => {
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-      ...options.headers,
-    },
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || `Request failed with status ${response.status}`);
-  }
-
-  return response.json();
-};
+import { supabase } from '@/lib/supabase';
 
 const statusStyles = {
   open: 'bg-blue-500/20 text-blue-200 border-blue-400/30',
@@ -60,7 +42,11 @@ export function WarrantyClaims() {
     if (!token) return;
     setLoadingClaims(true);
     try {
-      const data = await apiRequest('/api/v1/warranty-claims', token);
+      const { data, error } = await supabase
+        .from('warranty_claims')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
       setClaims(data);
     } catch (error) {
       toast({ title: 'Warranty Claims Failed', description: error.message, variant: 'destructive' });
@@ -130,15 +116,17 @@ export function WarrantyClaims() {
     }
 
     try {
-      const claim = await apiRequest('/api/v1/warranty-claims', token, {
-        method: 'POST',
-        body: JSON.stringify({
-          sale_item_id: selectedSaleItemId,
-          claimed_item_code: claimedItemCode || null,
-          replacement_product_id: replacementProductId,
-          issue_description: issueDescription,
-        }),
-      });
+      const newClaim = {
+        sale_item_id: selectedSaleItemId,
+        claimed_item_code: claimedItemCode || null,
+        replacement_product_id: replacementProductId,
+        issue_description: issueDescription,
+        status: 'open',
+        claim_number: 'CLM-' + Date.now(), // Generate a claim number locally
+      };
+      const { data, error } = await supabase.from('warranty_claims').insert([newClaim]).select().single();
+      if (error) throw error;
+      const claim = data;
 
       setClaims((current) => [claim, ...current]);
       setIssueDescription('');
@@ -157,13 +145,12 @@ export function WarrantyClaims() {
     const status = update.status || claim.status;
 
     try {
-      const updatedClaim = await apiRequest(`/api/v1/warranty-claims/${claim.id}`, token, {
-        method: 'PUT',
-        body: JSON.stringify({
-          status,
-          resolution_notes: update.resolution_notes ?? claim.resolution_notes ?? '',
-        }),
-      });
+      const updateData = {
+        status,
+        resolution_notes: update.resolution_notes ?? claim.resolution_notes ?? '',
+      };
+      const { data: updatedClaim, error } = await supabase.from('warranty_claims').update(updateData).eq('id', claim.id).select().single();
+      if (error) throw error;
 
       setClaims((current) => current.map((item) => (item.id === claim.id ? updatedClaim : item)));
       if (updatedClaim.replacement_stock_deducted_at) {
@@ -177,9 +164,11 @@ export function WarrantyClaims() {
 
   const returnClaimToStock = async (claim) => {
     try {
-      const updatedClaim = await apiRequest(`/api/v1/warranty-claims/${claim.id}/return-stock`, token, {
-        method: 'POST',
-      });
+      const updateData = {
+        returned_stock_added_at: new Date().toISOString()
+      };
+      const { data: updatedClaim, error } = await supabase.from('warranty_claims').update(updateData).eq('id', claim.id).select().single();
+      if (error) throw error;
 
       setClaims((current) => current.map((item) => (item.id === claim.id ? updatedClaim : item)));
       await refreshInventory();

@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { supabase } from '@/lib/supabase';
+import bcrypt from 'bcryptjs';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,31 +21,35 @@ export function Login({ onLogin }) {
     setLoading(true);
 
     try {
-      // --- API Call to Laravel Backend ---
-      const response = await fetch('/api/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify(credentials), // Send email and password
-      });
+      // --- Database Call to Supabase ---
+      const { data: users, error: dbError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', credentials.email);
 
-      const data = await response.json();
+      if (dbError) throw dbError;
 
-      if (response.ok) {
-        // --- Handle Successful Login ---
-        toast({
-          title: "Login Successful",
-          description: `Welcome back!`,
-        });
-        // The onLogin function (from your auth context/hook) will handle storing
-        // the token and user data, then redirecting.
-        onLogin(data); // Pass the entire response data (message, token, user)
-      } else {
-        // --- Handle Login Error ---
-        throw new Error(data.message || 'Invalid credentials');
+      const user = users?.[0];
+      if (!user) {
+        throw new Error('Invalid credentials');
       }
+
+      // Verify password using bcryptjs
+      const isMatch = await bcrypt.compare(credentials.password, user.password);
+      
+      if (!isMatch) {
+        throw new Error('Invalid credentials');
+      }
+
+      // --- Handle Successful Login ---
+      toast({
+        title: "Login Successful",
+        description: `Welcome back!`,
+      });
+      
+      // Simulate a token for local state management
+      const fakeToken = btoa(user.email + Date.now());
+      onLogin({ token: fakeToken, user }); 
     } catch (error) {
       toast({
         title: "Login Failed",
