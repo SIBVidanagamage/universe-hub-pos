@@ -1,0 +1,54 @@
+functionsDirectory = "D:\\universe hub poss\\Mobile-Accessories-shop-system-master\\Mobile-Accessories-shop-system-master\\netlify\\functions"
+functionsDirectoryOrigin = "default"
+redirectsOrigin = "config"
+plugins = []
+headers = []
+
+[build]
+publish = "D:\\universe hub poss\\Mobile-Accessories-shop-system-master\\Mobile-Accessories-shop-system-master\\dist"
+publishOrigin = "config"
+commandOrigin = "config"
+command = "echo 'Skipping build as it was built locally'"
+functions = "D:\\universe hub poss\\Mobile-Accessories-shop-system-master\\Mobile-Accessories-shop-system-master\\netlify\\functions"
+
+[build.environment]
+
+[build.processing]
+
+[build.processing.css]
+
+[build.processing.html]
+
+[build.processing.images]
+
+[build.processing.js]
+
+[build.services]
+
+[functions]
+
+[functions."*"]
+
+[[redirects]]
+from = "/api/*"
+to = "/.netlify/functions/:splat"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]
+
+[[redirects]]
+from = "/*"
+to = "/index.html"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]

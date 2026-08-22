@@ -11,4 +11,9 @@ export default defineConfig({
             '@': path.resolve(__dirname, './resources/js'),
         },
     },
+    server: {
+        proxy: {
+            '/api': 'http://127.0.0.1:3001'
+        }
+    }
 });

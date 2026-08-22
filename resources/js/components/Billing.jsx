@@ -95,6 +95,11 @@ export function Billing() {
   const addItemToCart = (item, type) => {
     if (!item) return;
 
+    if (type === 'product' && (!item.quantity || item.quantity <= 0)) {
+        toast({ title: "Out of Stock", description: `${item.name} is out of stock.`, variant: "destructive" });
+        return;
+    }
+
     const uniqueCartId = `${type}-${item.id}`;
     const existingItem = cart.find(cartItem => cartItem.uniqueCartId === uniqueCartId);
 
@@ -143,6 +148,11 @@ export function Billing() {
     }
     setCart(cart.map(item => {
       if (item.uniqueCartId !== uniqueCartId) return item;
+
+      if (item.type === 'product' && newQuantity > item.quantity) {
+          toast({ title: "Stock Limit", description: `Cannot add more than available stock (${item.quantity}).`, variant: "destructive" });
+          return item;
+      }
 
       const currentCodes = item.itemCodes || [];
       const nextCodes = Array.from({ length: newQuantity }, (_, index) => currentCodes[index] || '');
@@ -503,7 +513,7 @@ export function Billing() {
             </div>
           `;
           
-          const response = await fetch('http://127.0.0.1:3001/api/send-email', {
+          const response = await fetch('/api/send-email', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

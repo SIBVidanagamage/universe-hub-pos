@@ -132,7 +132,7 @@ export function Promotions() {
                 </div>
             `;
 
-            const response = await fetch('http://127.0.0.1:3001/api/send-email', {
+            const response = await fetch('/api/send-email', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -164,7 +164,7 @@ export function Promotions() {
     const fetchInbox = async () => {
         setLoadingInbox(true);
         try {
-            const response = await fetch('http://127.0.0.1:3001/api/inbox');
+            const response = await fetch('/api/inbox');
             if (!response.ok) throw new Error('Failed to fetch inbox');
             const data = await response.json();
             setInboxEmails(data);
