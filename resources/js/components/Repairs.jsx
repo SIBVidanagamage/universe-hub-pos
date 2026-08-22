@@ -408,7 +408,7 @@ export function Repairs() {
             </div>
           `;
           
-          await fetch('/api/send-email', {
+          const response = await fetch('/api/send-email', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -417,15 +417,31 @@ export function Repairs() {
               html: htmlReceipt
             })
           });
+          
+          if (!response.ok) throw new Error('Email server returned ' + response.status);
+          newSaleData.receipt_emailed_at = new Date().toISOString();
         } catch (e) {
           console.error("Email sending failed:", e);
+          newSaleData.receipt_email_error = 'Email failed: ' + e.message;
         }
+      } else if (salePayload.sendEmailReceipt && !salePayload.customerEmail) {
+          newSaleData.receipt_email_error = 'Customer Email is empty.';
       }
 
       toast({
         title: "Repair Bill Recorded",
-        description: `Total: LKR ${newSaleData.total}`
+        description: newSaleData.receipt_emailed_at
+          ? `Total: LKR ${newSaleData.total}. Receipt emailed.`
+          : `Total: LKR ${newSaleData.total}`
       });
+      
+      if (newSaleData.receipt_email_error) {
+        toast({
+          title: "Email Not Sent",
+          description: newSaleData.receipt_email_error,
+          variant: "destructive",
+        });
+      }
       
       // Override saleData items with original cart names for immediate printing before re-fetch finishes
       const printData = {
