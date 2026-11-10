@@ -128,15 +128,42 @@ export function Billing() {
 
   const handleBarcodeScan = (e) => {
       e.preventDefault();
-      const barcode = barcodeInputRef.current.value;
-      if (!barcode) return;
+      const rawBarcode = (barcodeInputRef.current?.value || '').trim();
+      if (!rawBarcode) return;
 
-      const product = inventory.find(item => item.barcode === barcode);
+      const clean = rawBarcode.toLowerCase();
+
+      // 1. Exact match on barcode
+      let product = inventory.find(item => String(item.barcode || '').trim().toLowerCase() === clean);
+
+      // 2. Fallback: Exact match on SKU
+      if (!product) {
+          product = inventory.find(item => String(item.sku || '').trim().toLowerCase() === clean);
+      }
+
+      // 3. Fallback: Numeric match (in case leading zeros differ, e.g. "00082" vs "82")
+      if (!product && /^\d+$/.test(clean)) {
+          const num = parseInt(clean, 10);
+          product = inventory.find(item => {
+              const bNum = parseInt(item.barcode, 10);
+              const sNum = parseInt(item.sku, 10);
+              return (!isNaN(bNum) && bNum === num) || (!isNaN(sNum) && sNum === num);
+          });
+      }
+
+      // 4. Fallback: Serial Number or Phone IMEI
+      if (!product) {
+          product = inventory.find(item =>
+              (item.serialNumber && String(item.serialNumber).trim().toLowerCase() === clean) ||
+              (item.phoneImei && String(item.phoneImei).trim().toLowerCase() === clean)
+          );
+      }
+
       if (product) {
           addItemToCart(product, 'product');
-          barcodeInputRef.current.value = '';
+          if (barcodeInputRef.current) barcodeInputRef.current.value = '';
       } else {
-          toast({ title: "Product Not Found", description: "No product with that barcode exists.", variant: "destructive" });
+          toast({ title: "Product Not Found", description: `No product found for barcode: ${rawBarcode}`, variant: "destructive" });
       }
   };
 
@@ -597,16 +624,16 @@ export function Billing() {
                 <div className="flex-grow border-t border-white/10"></div><span className="text-xs text-gray-400">OR</span><div className="flex-grow border-t border-white/10"></div>
               </div>
               <Select onValueChange={(val) => {
-                  if (!val) return;
+                  if (!val || val.startsWith('header-')) return;
                   const [type, id] = val.split('-');
                   const item = type === 'product' ? inventory.find(p => p.id == id) : bundles.find(b => b.id == id);
                   addItemToCart(item, type);
               }}>
                 <SelectTrigger><SelectValue placeholder="Select an Item or Bundle" /></SelectTrigger>
                 <SelectContent>
-                    <SelectItem value={null} disabled>--- Products ---</SelectItem>
+                    <SelectItem value="header-products" disabled>--- Products ---</SelectItem>
                     {inventory.map(p => <SelectItem key={`prod-${p.id}`} value={`product-${p.id}`}>{p.name}</SelectItem>)}
-                    <SelectItem value={null} disabled>--- Bundles ---</SelectItem>
+                    <SelectItem value="header-bundles" disabled>--- Bundles ---</SelectItem>
                     {bundles.map(b => <SelectItem key={`bund-${b.id}`} value={`bundle-${b.id}`}>{b.name}</SelectItem>)}
                 </SelectContent>
               </Select>
