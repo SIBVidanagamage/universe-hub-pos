@@ -47,7 +47,7 @@ function AppLayout() {
             {/* Cosmic Ambient Background Elements */}
             <div className="absolute top-[-20%] left-[-10%] w-[60vw] h-[60vw] bg-cosmic-blue/20 rounded-full mix-blend-screen filter blur-[150px] opacity-30 animate-pulse-glow pointer-events-none z-0"></div>
             <div className="absolute bottom-[-20%] right-[-10%] w-[60vw] h-[60vw] bg-cosmic-purple/20 rounded-full mix-blend-screen filter blur-[150px] opacity-30 animate-pulse-glow pointer-events-none z-0" style={{ animationDelay: '2s' }}></div>
-            
+
             {/* Abstract Orbit Rings */}
             <div className="absolute top-[50%] left-[50%] w-[150vw] h-[150vw] -translate-x-1/2 -translate-y-1/2 border-[1px] border-white/[0.02] rounded-full pointer-events-none z-0"></div>
             <div className="absolute top-[50%] left-[50%] w-[120vw] h-[120vw] -translate-x-1/2 -translate-y-1/2 border-[1px] border-white/[0.03] rounded-full pointer-events-none z-0 animate-orbit"></div>
@@ -56,7 +56,7 @@ function AppLayout() {
             {/* Mobile Header (visible only on mobile) */}
             <div className="md:hidden flex items-center justify-between p-3 bg-slate-900/90 backdrop-blur-md border-b border-white/10 z-30 relative">
                 <div className="flex items-center gap-3">
-                    <button 
+                    <button
                         onClick={() => setMobileMenuOpen(true)}
                         className="p-2 rounded-xl bg-white/10 text-white hover:bg-white/20 transition-colors"
                         title="Open Menu"

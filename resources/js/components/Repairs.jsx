@@ -197,14 +197,31 @@ export function Repairs() {
     }
   };
 
-  const generateSlipsHtml = (jobData, slipMode = 'both') => {
+  const generateSlipsHtml = (jobData, slipMode = 'customer') => {
     const formattedDate = new Date(jobData.created_at || Date.now()).toLocaleString('en-GB', {
       day: '2-digit', month: '2-digit', year: 'numeric',
       hour: '2-digit', minute: '2-digit', hour12: true
     });
 
+    // Extract packed fields if reloaded from Supabase
+    const passcodeMatch = (jobData.issue_description || '').match(/\[Passcode:\s*([^\]]+)\]/);
+    const condMatch = (jobData.issue_description || '').match(/\[Cond:\s*([^\]]+)\]/);
+    const accMatch = (jobData.issue_description || '').match(/\[Acc:\s*([^\]]+)\]/);
+    const advMatch = (jobData.issue_description || '').match(/\[Adv Paid:\s*LKR\s*([0-9.]+)\]/);
+
+    const passcode = jobData.passcode || (passcodeMatch ? passcodeMatch[1] : '');
+    const physicalCondition = jobData.physical_condition || (condMatch ? condMatch[1] : '');
+    const accessories = jobData.accessories || (accMatch ? accMatch[1] : '');
+
+    const cleanIssueDesc = (jobData.issue_description || '')
+      .replace(/\[Passcode:\s*[^\]]+\]/g, '')
+      .replace(/\[Cond:\s*[^\]]+\]/g, '')
+      .replace(/\[Acc:\s*[^\]]+\]/g, '')
+      .replace(/\[Adv Paid:\s*[^\]]+\]/g, '')
+      .trim();
+
     const estCost = parseFloat(jobData.estimated_cost) || 0;
-    const advPaid = parseFloat(jobData.advance_paid) || 0;
+    const advPaid = parseFloat(jobData.advance_paid) || (advMatch ? parseFloat(advMatch[1]) : 0);
     const balance = Math.max(0, estCost - advPaid);
 
     // SLIP 1: CUSTOMER HANDOVER RECEIPT
@@ -286,7 +303,7 @@ export function Repairs() {
           <tr style="background: #e2e8f0;">
             <td style="padding: 4px; font-weight: 900; color: #000;">LOCK CODE:</td>
             <td style="padding: 4px; text-align: right; font-weight: 900; font-size: 11pt; color: #000; font-family: monospace;">
-              ${jobData.passcode || 'NO LOCK'}
+              ${passcode || 'NO LOCK'}
             </td>
           </tr>
 
@@ -295,19 +312,19 @@ export function Repairs() {
           <tr>
             <td colspan="2" style="padding: 4px 0;">
               <div style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 4px; border-radius: 3px; font-size: 8pt;">
-                <strong>Work to be done:</strong> ${jobData.issue_description || 'Standard repair & inspection.'}
+                <strong>Work to be done:</strong> ${cleanIssueDesc || 'Standard repair & inspection.'}
               </div>
             </td>
           </tr>
 
-          ${jobData.physical_condition ? `
+          ${physicalCondition ? `
           <tr><td colspan="2" style="padding: 2px 0; font-size: 7.5pt; color: #444;">
-            <strong>Condition:</strong> ${jobData.physical_condition}
+            <strong>Condition:</strong> ${physicalCondition}
           </td></tr>` : ''}
 
-          ${jobData.accessories ? `
+          ${accessories ? `
           <tr><td colspan="2" style="padding: 2px 0; font-size: 7.5pt; color: #444;">
-            <strong>Left with phone:</strong> ${jobData.accessories}
+            <strong>Left with phone:</strong> ${accessories}
           </td></tr>` : ''}
           
           <tr><td colspan="2" style="border-top: 1px dashed #666; padding-top: 3px;"></td></tr>
@@ -469,8 +486,8 @@ export function Repairs() {
         description: `Tracking ID: ${trackingCode}. Customer can now track at universehub.store!`,
       });
 
-      // 4. Print Dual Slips (Customer + Technician)
-      await handlePrintSlips(fullJobData, 'both');
+      // 4. Print ONLY Customer Handover Receipt (clean single slip, no alignment issues)
+      await handlePrintSlips(fullJobData, 'customer');
 
       // Reset Form
       setIntakeForm({
@@ -969,26 +986,36 @@ export function Repairs() {
                         </Button>
                       </div>
 
-                      {/* Secondary Actions: WhatsApp & Slips */}
-                      <div className="flex items-center gap-2 pt-1">
+                      {/* Secondary Actions: WhatsApp & Technician Bill */}
+                      <div className="grid grid-cols-2 gap-2 pt-1">
                         <Button
                           size="sm"
-                          className="flex-1 h-8 text-xs bg-[#25d366] hover:bg-[#20ba59] text-black font-semibold"
+                          className="h-9 text-xs bg-[#25d366] hover:bg-[#20ba59] text-black font-bold rounded-xl shadow-sm"
                           onClick={() => handleSendWhatsApp(job)}
                           title="Send Customer WhatsApp Notification"
                         >
-                          <MessageCircle className="w-3.5 h-3.5 mr-1" /> WhatsApp
+                          <MessageCircle className="w-4 h-4 mr-1.5" /> WhatsApp
                         </Button>
 
                         <Button
                           size="sm"
                           variant="outline"
-                          className="h-8 px-2 text-xs border-white/15 text-gray-300 hover:text-white hover:bg-white/10"
-                          onClick={() => handlePrintSlips(job, 'both')}
-                          title="Reprint Dual Slips"
+                          className="h-9 text-xs border-amber-500/50 bg-amber-500/15 hover:bg-amber-500 hover:text-black text-amber-300 font-bold rounded-xl shadow-sm transition-all"
+                          onClick={() => handlePrintSlips(job, 'technician')}
+                          title="Print Technician Job Sheet"
                         >
-                          <Printer className="w-3.5 h-3.5" />
+                          <Printer className="w-4 h-4 mr-1.5" /> Tech Bill 🖨️
                         </Button>
+                      </div>
+
+                      <div className="flex justify-end pt-0.5">
+                        <button
+                          type="button"
+                          className="text-[11px] text-gray-400 hover:text-cyan-300 transition-colors flex items-center gap-1 cursor-pointer"
+                          onClick={() => handlePrintSlips(job, 'customer')}
+                        >
+                          <FileText className="w-3 h-3" /> Print Customer Bill
+                        </button>
                       </div>
                     </div>
                   </CardContent>
@@ -1020,11 +1047,11 @@ export function Repairs() {
                   New Mobile Device Intake Form
                 </CardTitle>
                 <CardDescription className="text-gray-300">
-                  Fill in customer & device details to register repair, sync live to universehub.store, and print 2 slips (Customer + Technician)
+                  Fill in customer & device details to register repair, sync live to universehub.store, and print customer handover receipt
                 </CardDescription>
               </div>
               <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30 px-3 py-1 text-xs">
-                Prints 2 Copies Automatically
+                Prints Customer Receipt
               </Badge>
             </div>
           </CardHeader>
@@ -1311,7 +1338,7 @@ export function Repairs() {
                   className="flex-1 py-6 rounded-2xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-bold text-base shadow-xl"
                 >
                   <Printer className="w-5 h-5 mr-2" />
-                  {isSubmittingIntake ? 'Registering & Printing...' : 'Register Device & Print 2 Slips (Customer + Technician)'}
+                  {isSubmittingIntake ? 'Registering & Printing...' : 'Register Device & Print Customer Receipt'}
                 </Button>
               </div>
             </form>

@@ -1,5 +1,5 @@
 functionsDirectory = "D:\\universe hub poss\\Mobile-Accessories-shop-system-master\\Mobile-Accessories-shop-system-master\\netlify\\functions"
-functionsDirectoryOrigin = "default"
+functionsDirectoryOrigin = "config-v1"
 redirectsOrigin = "config"
 plugins = []
 headers = []
