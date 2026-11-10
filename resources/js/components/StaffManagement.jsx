@@ -87,6 +87,7 @@ export function StaffManagement() {
         switch (role) {
             case 'admin': return 'destructive';
             case 'manager': return 'default';
+            case 'technician': return 'default';
             case 'cashier': return 'secondary';
             default: return 'outline';
         }
@@ -138,6 +139,7 @@ export function StaffManagement() {
                                     <SelectContent>
                                         <SelectItem value="admin">Admin</SelectItem>
                                         <SelectItem value="manager">Manager</SelectItem>
+                                        <SelectItem value="technician">Technician</SelectItem>
                                         <SelectItem value="cashier">Cashier</SelectItem>
                                         <SelectItem value="viewer">Viewer</SelectItem>
                                     </SelectContent>
@@ -211,6 +213,7 @@ export function StaffManagement() {
                                     <SelectContent>
                                         <SelectItem value="admin">Admin</SelectItem>
                                         <SelectItem value="manager">Manager</SelectItem>
+                                        <SelectItem value="technician">Technician</SelectItem>
                                         <SelectItem value="cashier">Cashier</SelectItem>
                                         <SelectItem value="viewer">Viewer</SelectItem>
                                     </SelectContent>

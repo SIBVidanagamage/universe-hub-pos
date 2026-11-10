@@ -1,6 +1,6 @@
 -- ========================================================
 -- UNIVERSE HUB POS: SUPABASE PRODUCTS REPAIR & RESTORE
--- Run this in Supabase Dashboard -> SQL Editor
+-- Run this in Supabase Dashboard -> SQL Editor                 
 -- ========================================================
 
 -- 1. Ensure table has correct structure

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Routes, Route, Navigate, useLocation, Outlet } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Toaster } from '@/components/ui/toaster';
@@ -22,6 +22,8 @@ import { StaffProvider } from '@/hooks/useStaff';
 import { Bundles } from '@/components/bundles/Bundles';
 import { BundlesProvider } from '@/hooks/useBundles';
 import { SalesProvider } from '@/hooks/useSales';
+import { Menu, Smartphone } from 'lucide-react';
+import { Starfield } from './components/Starfield';
 
 // This component remains the same. It protects routes from unauthenticated access.
 function ProtectedRoute() {
@@ -32,17 +34,15 @@ function ProtectedRoute() {
     return user ? <Outlet /> : <Navigate to="/login" replace />;
 }
 
-// The main layout for authenticated pages, including the sidebar.
-import { Starfield } from './components/Starfield';
-
 function AppLayout() {
     const { user, logout } = useAuth();
     const { lowStockItems } = useInventory();
     const location = useLocation();
     const activeTab = location.pathname.split('/')[1] || 'dashboard';
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
     return (
-        <div className="flex h-screen bg-cosmic-bg relative overflow-hidden text-white font-sans">
+        <div className="flex flex-col md:flex-row h-screen bg-cosmic-bg relative overflow-hidden text-white font-sans">
             <Starfield />
             {/* Cosmic Ambient Background Elements */}
             <div className="absolute top-[-20%] left-[-10%] w-[60vw] h-[60vw] bg-cosmic-blue/20 rounded-full mix-blend-screen filter blur-[150px] opacity-30 animate-pulse-glow pointer-events-none z-0"></div>
@@ -53,15 +53,40 @@ function AppLayout() {
             <div className="absolute top-[50%] left-[50%] w-[120vw] h-[120vw] -translate-x-1/2 -translate-y-1/2 border-[1px] border-white/[0.03] rounded-full pointer-events-none z-0 animate-orbit"></div>
             <div className="absolute top-[50%] left-[50%] w-[90vw] h-[90vw] -translate-x-1/2 -translate-y-1/2 border-[1px] border-white/[0.04] rounded-full pointer-events-none z-0 animate-orbit" style={{ animationDirection: 'reverse', animationDuration: '120s' }}></div>
 
+            {/* Mobile Header (visible only on mobile) */}
+            <div className="md:hidden flex items-center justify-between p-3 bg-slate-900/90 backdrop-blur-md border-b border-white/10 z-30 relative">
+                <div className="flex items-center gap-3">
+                    <button 
+                        onClick={() => setMobileMenuOpen(true)}
+                        className="p-2 rounded-xl bg-white/10 text-white hover:bg-white/20 transition-colors"
+                        title="Open Menu"
+                    >
+                        <Menu className="w-5 h-5" />
+                    </button>
+                    <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 bg-gradient-to-br from-cosmic-purple to-cosmic-blue rounded-lg flex items-center justify-center">
+                            <Smartphone className="w-4 h-4 text-white" />
+                        </div>
+                        <span className="font-bold text-sm tracking-wide text-white">UNIVERSE HUB</span>
+                    </div>
+                </div>
+                <div className="flex items-center gap-2">
+                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-500/20 text-cyan-300 capitalize border border-blue-500/30 font-medium">
+                        {user?.role || 'Staff'}
+                    </span>
+                </div>
+            </div>
+
             <Sidebar
                 activeTab={activeTab}
                 onLogout={logout}
                 user={user}
                 lowStockCount={lowStockItems.length}
-                className="z-10 relative"
+                mobileOpen={mobileMenuOpen}
+                onCloseMobile={() => setMobileMenuOpen(false)}
             />
             <main className="flex-1 overflow-auto z-10 relative">
-                <div className="p-6">
+                <div className="p-3 sm:p-6">
                     <AnimatePresence mode="wait">
                         <motion.div
                             key={location.key}
@@ -135,7 +160,7 @@ function App() {
                         <Route path="reports" element={<Reports />} />
 
                         {/* Default route for authenticated users */}
-                        <Route index element={<Navigate to="/dashboard" replace />} />
+                        <Route index element={<Navigate to={user?.role === 'technician' ? "/repairs" : "/dashboard"} replace />} />
                     </Route>
                 </Route>
             </Routes>
