@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS public.products (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Enable RLS & Allow public/authenticated access
+-- Enable RLS & Allow full access
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow full access to products" ON public.products;
 CREATE POLICY "Allow full access to products" ON public.products FOR ALL USING (true) WITH CHECK (true);
@@ -48,33 +48,33 @@ INSERT INTO public.products (
 (8, 'UGREEN- Uno Power Bank 10000mAh (30W)', 'PowerBank', '00007', '00007', 1, 0, 10690.00, 14490.00, 'UGREEN', 6, '2025-07-11 03:55:50', '2025-07-11 03:55:50', 'general'),
 (9, 'UGREEN-Uno Magnetic Wireless Power Bank 10000mAh (20W)', 'PowerBank', '00008', '00008', 1, 0, 12290.00, 16690.00, 'UGREEN', 6, '2025-07-11 03:58:18', '2025-07-17 05:42:38', 'general'),
 (10, 'UGREEN-Uno 6-1 USB-C Hub', 'PowerBank', '00009', '00009', 0, 0, 5690.00, 9490.00, 'UGREEN', 6, '2025-07-11 04:04:04', '2025-11-11 09:13:48', 'general'),
-(11, 'UGREEN- HiTune Max5', 'headphone', '00010', '00010', 0, 0, 14750.00, 18490.00, 'UGREEN', 8, '2025-07-11 04:06:39', '2025-07-13 21:14:12', 'phone'),
+(11, 'UGREEN- HiTune Max5', 'headphone', '00010', '00010', 0, 0, 14750.00, 18490.00, 'UGREEN', 8, '2025-07-11 04:06:39', '2025-07-13 21:14:12', 'general'),
 (12, 'UGREEN- 10000mAh Two-Way Fast Charging Power bank', 'PowerBank', '00011', '00011', 2, 0, 6190.00, 9490.00, 'UGREEN', 8, '2025-07-11 04:10:32', '2025-07-11 04:10:32', 'general'),
 (13, 'UGREEN- 20000mAh Two-Way Fast Charging Power bank', 'PowerBank', '00012', '00012', 0, 1, 7990.00, 10490.00, 'UGREEN', 8, '2025-07-11 04:14:32', '2025-11-03 05:12:20', 'general'),
 (14, 'UGREEN-Nexode 4- Port PD GaN Fast Charger (100W)', 'Charger Adapter', '00014', '00014', 1, 0, 9670.00, 13990.00, 'UGREEN', 12, '2025-07-11 04:19:02', '2025-07-11 04:19:02', 'general'),
 (15, 'Iphone 20W Adapter', 'Charger Adapter', '00015', '00015', 24, 15, 1190.00, 6490.00, 'HYUNDAI Premier', 12, '2025-07-11 04:22:17', '2025-08-16 08:20:37', 'general'),
 (16, 'Iphone C to C Cable (60W)', 'Cable', '00016', '00016', 0, 15, 160.00, 4990.00, 'SP mobile ( down)', 12, '2025-07-11 04:28:32', '2026-02-25 04:33:26', 'general'),
 (17, 'USB-C TO lightning cable', 'Cable', '00017', '00017', 0, 1, 550.00, 4490.00, 'SP mobile ( down)', 12, '2025-07-11 04:36:18', '2026-04-25 16:30:11', 'general'),
-(18, 'Samsung AKG Earphones', 'Earphones', '00018', '00018', 0, 2, 380.00, 1490.00, 'HYUNDAI Premier', 6, '2025-07-11 04:41:29', '2025-10-07 02:55:11', 'phone'),
+(18, 'Samsung AKG Earphones', 'Earphones', '00018', '00018', 0, 2, 380.00, 1490.00, 'HYUNDAI Premier', 6, '2025-07-11 04:41:29', '2025-10-07 02:55:11', 'general'),
 (19, 'Google 30W USB -C Charger', 'Charger Adapter', '00019', '00019', 1, 1, 1150.00, 5490.00, 'SP mobile ( down)', 12, '2025-07-11 04:46:16', '2026-03-31 05:30:53', 'general'),
 (20, 'Samsung 45W PD Adapter', 'Charger Adapter', '00020', '00020', 2, 1, 800.00, 5490.00, 'SP mobile ( down)', 6, '2025-07-11 04:48:48', '2025-09-26 05:29:32', 'general'),
 (21, 'Samsung 35W PD Adapter', 'Charger Adapter', '00021', '00021', 2, 1, 900.00, 4990.00, 'SP mobile ( down)', 6, '2025-07-11 04:51:20', '2025-09-22 00:12:44', 'general'),
 (23, 'Samsung 25W PD Adapter USB_C', 'Charger Adapter', '00023', '00023', 1, 1, 700.00, 3490.00, 'SP mobile ( down)', 6, '2025-07-11 04:54:29', '2025-10-26 10:27:54', 'general'),
 (24, 'Samsung 25W PD Adapter   USB-C TO USB-C Cable', 'Charger Adapter', '00024', '00024', 1, 1, 800.00, 3490.00, 'SP mobile ( down)', 6, '2025-07-11 04:57:12', '2026-04-28 16:17:56', 'general'),
 (25, 'Samsung 35W PD Adapter  USB-C< USB-A', 'Charger Adapter', '00025', '00025', 1, 1, 900.00, 5490.00, 'SP mobile ( down)', 6, '2025-07-11 04:58:52', '2025-11-09 00:33:18', 'general'),
-(26, 'EarPods LIghtning Conector', 'Earphones', '00026', '00026', 3, 1, 1200.00, 6490.00, 'SP mobile ( down)', 12, '2025-07-11 05:01:54', '2025-07-11 05:01:54', 'phone'),
-(27, 'Samsung USB-C Edition', 'Earphones', '00027', '00027', 2, 1, 600.00, 3490.00, 'SP mobile ( down)', 6, '2025-07-11 05:04:04', '2025-12-19 01:02:28', 'phone'),
-(28, 'WIUW Master wireless headset', 'headphone', '00028', '00028', 1, 0, 4950.00, 6490.00, 'otc.lk', 6, '2025-07-11 05:08:08', '2025-07-11 05:08:08', 'phone'),
-(29, 'WIWU TD2', 'headphone', '00029', '00029', 1, 0, 4050.00, 6490.00, 'otc.lk', 6, '2025-07-11 05:09:57', '2025-07-11 05:09:57', 'phone'),
-(30, 'WIWU TD8', 'headphone', '00030', '00030', 2, 0, 3495.00, 6990.00, 'otc.lk', 6, '2025-07-11 05:13:04', '2025-07-11 05:13:04', 'phone'),
-(31, 'WIWU TD6', 'headphone', '00031', '00031', 0, 1, 5695.00, 8490.00, 'otc.lk', 6, '2025-07-11 05:15:32', '2026-01-09 07:04:40', 'phone'),
-(32, 'WIWU TD5 headphones', 'headphone', '00032', '00032', 1, 0, 4195.00, 6490.00, 'otc.lk', 6, '2025-07-11 05:18:16', '2025-07-11 05:18:16', 'phone'),
-(33, 'WIWU TD1 headphone', 'headphone', '00033', '00033', 2, 0, 4895.00, 8490.00, 'otc.lk', 6, '2025-07-11 05:19:52', '2025-07-11 05:21:13', 'phone'),
+(26, 'EarPods LIghtning Conector', 'Earphones', '00026', '00026', 3, 1, 1200.00, 6490.00, 'SP mobile ( down)', 12, '2025-07-11 05:01:54', '2025-07-11 05:01:54', 'general'),
+(27, 'Samsung USB-C Edition', 'Earphones', '00027', '00027', 2, 1, 600.00, 3490.00, 'SP mobile ( down)', 6, '2025-07-11 05:04:04', '2025-12-19 01:02:28', 'general'),
+(28, 'WIUW Master wireless headset', 'headphone', '00028', '00028', 1, 0, 4950.00, 6490.00, 'otc.lk', 6, '2025-07-11 05:08:08', '2025-07-11 05:08:08', 'general'),
+(29, 'WIWU TD2', 'headphone', '00029', '00029', 1, 0, 4050.00, 6490.00, 'otc.lk', 6, '2025-07-11 05:09:57', '2025-07-11 05:09:57', 'general'),
+(30, 'WIWU TD8', 'headphone', '00030', '00030', 2, 0, 3495.00, 6990.00, 'otc.lk', 6, '2025-07-11 05:13:04', '2025-07-11 05:13:04', 'general'),
+(31, 'WIWU TD6', 'headphone', '00031', '00031', 0, 1, 5695.00, 8490.00, 'otc.lk', 6, '2025-07-11 05:15:32', '2026-01-09 07:04:40', 'general'),
+(32, 'WIWU TD5 headphones', 'headphone', '00032', '00032', 1, 0, 4195.00, 6490.00, 'otc.lk', 6, '2025-07-11 05:18:16', '2025-07-11 05:18:16', 'general'),
+(33, 'WIWU TD1 headphone', 'headphone', '00033', '00033', 2, 0, 4895.00, 8490.00, 'otc.lk', 6, '2025-07-11 05:19:52', '2025-07-11 05:21:13', 'general'),
 (34, 'WIWU ITAG WT01', 'ITAG', '00034', '00034', 3, 0, 2790.00, 4490.00, 'otc.lk', 6, '2025-07-11 05:22:26', '2025-07-11 05:22:26', 'general'),
 (35, 'ANKER Magnetic 5000mAh power bank', 'PowerBank', '00035', '00035', 2, 0, 6450.00, 12490.00, 'otc.lk', 6, '2025-07-11 05:25:07', '2025-07-11 05:25:17', 'general'),
 (36, 'T800 ULTRA3', 'Watch', '00036', '00036', 1, 1, 1100.00, 2290.00, 'STC', 3, '2025-07-11 05:28:17', '2025-11-03 06:02:51', 'general'),
-(37, 'free item P9', 'headphone', '00037', '00037', 3, 1, 1000.00, 0.00, 'STC', 0, '2025-07-11 05:29:42', '2025-07-15 04:30:43', 'phone'),
-(38, 'free item JBL', 'headphone', '00038', '00038', 3, 1, 0.00, 0.00, 'STC', 0, '2025-07-11 05:30:43', '2025-07-11 05:30:43', 'phone'),
+(37, 'free item P9', 'headphone', '00037', '00037', 3, 1, 1000.00, 0.00, 'STC', 0, '2025-07-11 05:29:42', '2025-07-15 04:30:43', 'general'),
+(38, 'free item JBL', 'headphone', '00038', '00038', 3, 1, 0.00, 0.00, 'STC', 0, '2025-07-11 05:30:43', '2025-07-11 05:30:43', 'general'),
 (39, 'Apple air pods (black)', 'earpods', '00039', '00039', 0, 0, 2250.00, 6990.00, 'STC', 6, '2025-07-11 05:34:01', '2025-08-14 08:48:36', 'general'),
 (40, 'Apple air pods (White)', 'earpods', '00040', '00040', 2, 3, 1600.00, 6490.00, 'STC', 6, '2025-07-11 05:35:32', '2025-10-09 02:51:37', 'general'),
 (41, 'CROWN AZ 100', 'Watch', '00041', '00041', 0, 0, 1850.00, 4500.00, 'STC', 3, '2025-07-11 05:38:06', '2025-10-31 03:55:25', 'general'),
@@ -182,7 +182,7 @@ INSERT INTO public.products (
 (146, 'ASPOR power bank', 'power Bank', '11177', '11177', 0, 0, 3490.00, 7590.00, 'OTC Mobile', 0, '2025-07-13 02:00:01', '2025-12-01 05:01:13', 'general'),
 (147, 'Baseus data cable', 'Cable', '11178', '11178', 0, 0, 1395.00, 2795.00, 'OTC Mobile', 0, '2025-07-13 02:01:37', '2025-10-31 07:12:07', 'general'),
 (148, 'Samsung 15W PD Adapter', 'Charger Adapter', '11179', '11179', 3, 1, 700.00, 3990.00, 'SP mobile ( down)', 6, '2025-07-16 02:15:28', '2025-07-16 02:15:28', 'general'),
-(149, 'anker soundcore H30i', 'headphone', '11180', '11180', 0, 0, 7590.00, 10990.00, 'OTC Mobile', 6, '2025-07-22 04:26:12', '2025-07-22 04:34:42', 'phone'),
+(149, 'anker soundcore H30i', 'headphone', '11180', '11180', 0, 0, 7590.00, 10990.00, 'OTC Mobile', 6, '2025-07-22 04:26:12', '2025-07-22 04:34:42', 'general'),
 (151, 'A grade c to lighning cable', 'Cable', '11182', '11182', 1, 3, 130.00, 1490.00, 'SP mobile ( down)', 0, '2025-07-28 02:02:51', '2026-05-05 12:25:17', 'general'),
 (152, 'j s cover 15', 'Back Covers', '11183', '11183', 5, 4, 690.00, 1490.00, 'otc.lk', 0, '2025-07-28 02:12:36', '2026-02-26 04:52:49', 'general'),
 (153, '15 pro j s cover', 'Back Covers', '11184', '11184', 3, 2, 690.00, 1490.00, 'otc.lk', 0, '2025-07-28 02:14:43', '2026-03-01 02:07:58', 'general'),
@@ -393,7 +393,7 @@ INSERT INTO public.products (
 (365, 'asper c-c cable (AC-19)', 'Cable', '11391', '11391', 1, 1, 265.00, 2200.00, 'otc.lk', 4, '2026-05-25 18:22:35', '2026-05-25 18:22:35', 'general'),
 (366, 'anker BOOM 3 i', 'speeker', '11392', '11392', 1, 1, 25450.00, 30000.00, 'otc.lk', 18, '2026-05-25 18:24:40', '2026-05-25 18:24:40', 'general'),
 (367, 'iphone 14 pro 128gb (8994029800024063725)(white))', 'iphone', '11393', '11393', 0, 1, 169000.00, 174000.00, 'cellexpress', 1, '2026-06-02 21:18:15', '2026-06-02 21:19:27', 'phone'),
-(368, 'Anker  R50i(194644199562)', 'headphone', '11394', '11394', 0, 1, 5500.00, 6500.00, 'cellexpress', 15, '2026-06-03 13:01:19', '2026-06-03 13:03:50', 'phone'),
+(368, 'Anker  R50i(194644199562)', 'headphone', '11394', '11394', 0, 1, 5500.00, 6500.00, 'cellexpress', 15, '2026-06-03 13:01:19', '2026-06-03 13:03:50', 'general'),
 (369, 'Samsung Galaxy Watch 8 40mm', 'Watch', '11395', '11395', 0, 1, 79000.00, 81900.00, 'me', 12, '2026-06-08 11:44:10', '2026-06-08 11:45:55', 'general');
 
 -- 3. Reset auto-increment sequence to highest existing ID
