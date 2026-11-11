@@ -20,14 +20,18 @@ import {
   Search, 
   Smartphone, 
   MessageCircle, 
+  PhoneCall, 
   CheckCircle2, 
   Clock, 
+  ExternalLink, 
   FileText, 
   RefreshCw, 
   User, 
   Lock, 
+  Tag, 
   DollarSign, 
-  ArrowRight,
+  SlidersHorizontal,
+  Layers,
   Sparkles
 } from 'lucide-react';
 import { supabase, webSupabase } from '@/lib/supabase';
@@ -39,6 +43,7 @@ export function Repairs() {
   const { user } = useAuth();
 
   // Active Main View Tab
+  // Technicians default to 'active-repairs', others default to 'intake'
   const isTechnician = user?.role === 'technician';
   const [activeTab, setActiveTab] = useState(isTechnician ? 'active-repairs' : 'intake');
 
@@ -71,6 +76,7 @@ export function Repairs() {
     advancePaid: '',
     advancePaymentMethod: 'cash',
     expectedDate: '',
+    status: 'Received',
   });
 
   const [isSubmittingIntake, setIsSubmittingIntake] = useState(false);
@@ -81,7 +87,7 @@ export function Repairs() {
   const [isProcessingSettle, setIsProcessingSettle] = useState(false);
 
   // ==========================================
-  // STATE: Quick / Final Billing
+  // STATE: Direct Billing Cart (Original Flow)
   // ==========================================
   const [cart, setCart] = useState([]);
   const [directCustomerTitle, setDirectCustomerTitle] = useState('Mr.');
@@ -95,13 +101,9 @@ export function Repairs() {
   const [paymentKoko, setPaymentKoko] = useState(0);
   const [isProcessingDirect, setIsProcessingDirect] = useState(false);
 
-  // Tracking Code Lookup in Quick Billing
-  const [trackingLookup, setTrackingLookup] = useState('');
-  const [activeLinkedJob, setActiveLinkedJob] = useState(null);
-
   const [directRepairForm, setDirectRepairForm] = useState({
       name: '',
-      warrantyPeriod: '3',
+      warrantyPeriod: '',
       sellingPrice: '',
       discount: '',
       costPrice: ''
@@ -182,105 +184,7 @@ export function Repairs() {
   }, [intakeForm.customerPhone]);
 
   // ==========================================
-  // CONVERT REPAIR JOB TO FINAL BILL (Cart Load)
-  // ==========================================
-  const loadJobIntoQuickBilling = (job) => {
-    if (!job) return;
-
-    // Extract Advance Paid from issue_description or field
-    const advMatch = (job.issue_description || '').match(/\[Adv Paid:\s*LKR\s*([0-9.]+)\]/);
-    const advPaid = parseFloat(job.advance_paid) || (advMatch ? parseFloat(advMatch[1]) : 0);
-    const estCost = parseFloat(job.estimated_cost) || 0;
-    const balanceDue = Math.max(0, estCost - advPaid);
-
-    // Parse Customer Name & Title
-    let title = 'Mr.';
-    let cleanName = job.customer_name || 'Walk-in Customer';
-    const parts = cleanName.split(' ');
-    if (['Mr.', 'Mrs.', 'Miss', 'Dr.'].includes(parts[0])) {
-      title = parts[0];
-      cleanName = parts.slice(1).join(' ');
-    }
-
-    setDirectCustomerTitle(title);
-    setDirectCustomerName(cleanName);
-    setDirectCustomerPhone(job.phone || '');
-    setDirectCustomerEmail(job.email || '');
-
-    // Build Cart Item
-    const itemName = `${job.device_brand || ''} ${job.device_model} - ${job.issue_type} (#${job.ticket_number})`.trim();
-    const repairItem = {
-      uniqueCartId: `repair-${Date.now()}`,
-      name: itemName,
-      type: 'repair',
-      warrantyPeriod: 3, // Default 3 Months repair warranty
-      sellingPrice: estCost,
-      discount: advPaid, // Advance already paid is applied as deduction
-      advancePaid: advPaid,
-      costPrice: 0,
-      quantity: 1,
-      itemCodes: [],
-      jobTicketNumber: job.ticket_number,
-      jobId: job.id
-    };
-
-    setCart([repairItem]);
-    setPaymentCash(balanceDue);
-    setPaymentCard(0);
-    setPaymentTransfer(0);
-    setPaymentKoko(0);
-    setActiveLinkedJob(job);
-    setTrackingLookup(job.ticket_number);
-
-    // Switch to Quick Billing Tab
-    setActiveTab('direct');
-
-    toast({
-      title: "Repair Job Loaded! 🧾",
-      description: `Loaded #${job.ticket_number} for ${cleanName}. Balance due: LKR ${balanceDue.toFixed(2)}`,
-    });
-  };
-
-  const handleLookupRepairJob = async (codeToSearch) => {
-    const cleanCode = (codeToSearch || trackingLookup || '').trim().toUpperCase();
-    if (!cleanCode) {
-      toast({ title: "Tracking Code Required", description: "Please enter a tracking number (e.g. UH-5130).", variant: "destructive" });
-      return;
-    }
-
-    // 1. Check local list first
-    let found = repairJobs.find(j => (j.ticket_number || '').toUpperCase() === cleanCode);
-
-    // 2. Fallback to Cloud Web Supabase lookup
-    if (!found) {
-      try {
-        const { data, error } = await webSupabase
-          .from('repair_orders')
-          .select('*')
-          .ilike('ticket_number', cleanCode)
-          .limit(1);
-
-        if (!error && data && data.length > 0) {
-          found = data[0];
-        }
-      } catch (err) {
-        console.error("Lookup error:", err);
-      }
-    }
-
-    if (found) {
-      loadJobIntoQuickBilling(found);
-    } else {
-      toast({
-        title: "Repair Job Not Found",
-        description: `No repair found with Tracking Code: ${cleanCode}`,
-        variant: "destructive"
-      });
-    }
-  };
-
-  // ==========================================
-  // PRINTING HELPERS (Dual Slips & Browser Fallback)
+  // PRINTING HELPERS (Dual Slips & Direct Fallback)
   // ==========================================
   const printViaBrowser = (htmlContent) => {
     const printWindow = window.open('', '_blank', 'width=450,height=700');
@@ -441,15 +345,22 @@ export function Repairs() {
       </div>
     `;
 
+    const cutDivider = `
+      <div style="text-align: center; margin: 15px 0; font-size: 8pt; color: #888; border-top: 1px dashed #000; padding-top: 4px;">
+        ✂️ - - - - - - - - - - CUT HERE - - - - - - - - - - ✂️
+      </div>
+    `;
+
     let finalBody = '';
-    if (slipMode === 'technician') finalBody = technicianSlipHtml;
-    else finalBody = customerSlipHtml;
+    if (slipMode === 'customer') finalBody = customerSlipHtml;
+    else if (slipMode === 'technician') finalBody = technicianSlipHtml;
+    else finalBody = customerSlipHtml + cutDivider + technicianSlipHtml;
 
     return `
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Universe Hub Repair Slip - ${jobData.ticket_number}</title>
+          <title>Universe Hub Repair Slips - ${jobData.ticket_number}</title>
           <style>
             @media print {
               body { margin: 0; padding: 0; }
@@ -464,7 +375,7 @@ export function Repairs() {
     `;
   };
 
-  const handlePrintSlips = async (jobData, slipMode = 'customer') => {
+  const handlePrintSlips = async (jobData, slipMode = 'both') => {
     const htmlContent = generateSlipsHtml(jobData, slipMode);
 
     if (isConnected && window.qz) {
@@ -485,164 +396,6 @@ export function Repairs() {
 
     // Direct Browser Print Fallback (Works on mobile & without QZ Tray)
     printViaBrowser(htmlContent);
-  };
-
-  // ==========================================
-  // FINAL SALES BILL PRINTING (Thermal & EPSON)
-  // ==========================================
-  const handlePrintFinalBill = async (saleData, printerType = 'thermal') => {
-    const printerName = printerType === 'thermal' ? "Xprinter XP-365B" : "EPSON LQ-310";
-
-    const formattedDate = new Date(saleData.created_at || Date.now()).toLocaleString('en-GB', {
-      day: '2-digit', month: '2-digit', year: 'numeric',
-      hour: '2-digit', minute: '2-digit', hour12: true
-    });
-
-    const billItems = saleData.items || [];
-    let billHtml = '';
-
-    if (printerType === 'thermal') {
-      const thermalItemsHtml = billItems.map((item, index) => {
-        const itemTotal = (item.quantity * item.price_at_sale) - ((item.discount || 0) * item.quantity);
-        const name = item.saleable?.name || item.name || 'Repair Service';
-        const warranty = item.saleable?.warranty_period_months;
-        return `
-          <tr>
-            <td style="padding: 2px 0; border-bottom: 1px dotted #ccc;" colspan="4">
-              ${name}
-              ${warranty ? `<br/><small style="font-size: 7.5pt; color: #555;">(${warranty} Months Warranty)</small>` : ''}
-            </td>
-          </tr>
-          <tr>
-            <td style="padding: 2px 0; text-align: left;">${item.quantity}</td>
-            <td style="padding: 2px 0; text-align: right;">${parseFloat(item.price_at_sale).toFixed(2)}</td>
-            <td style="padding: 2px 0; text-align: right;">${parseFloat(item.discount || 0).toFixed(2)}</td>
-            <td style="padding: 2px 0; text-align: right; font-weight: bold;">${itemTotal.toFixed(2)}</td>
-          </tr>
-        `;
-      }).join('');
-
-      billHtml = `
-        <!DOCTYPE html>
-        <html>
-          <body style="font-family: Arial, sans-serif; font-size: 9pt; width: 72mm; margin: 0 auto; padding: 2mm;">
-            <div style="text-align: center; margin-bottom: 5px;">
-              <h1 style="font-size: 14pt; margin: 0; font-weight: bold;">UNIVERSE HUB</h1>
-              <p style="margin: 0; font-size: 8pt;">188/8 C, High Level Road, Maharagama</p>
-              <p style="margin: 0; font-size: 8pt;">Phone: 074-021-9239</p>
-            </div>
-            <div style="text-align: center; border-top: 1px dashed black; border-bottom: 1px dashed black; padding: 2px 0; margin-bottom: 5px;">
-              <strong>FINAL REPAIR INVOICE</strong>
-            </div>
-            <table style="width: 100%; font-size: 8pt; margin-bottom: 5px;">
-              <tr><td style="text-align: left;"><strong>Inv #:</strong> ${saleData.id || 'N/A'}</td><td style="text-align: right;">${formattedDate}</td></tr>
-              <tr><td style="text-align: left;"><strong>Cashier:</strong> ${saleData.user?.name || user?.name || 'Staff'}</td><td style="text-align: right;"><strong>Cust:</strong> ${saleData.customer_name}</td></tr>
-            </table>
-            <table style="width: 100%; font-size: 8pt; border-collapse: collapse;">
-              <thead>
-                <tr>
-                  <th style="text-align: left; padding: 2px 0; border-bottom: 1px solid black; border-top: 1px solid black; width: 10%;">Qty</th>
-                  <th style="text-align: right; padding: 2px 0; border-bottom: 1px solid black; border-top: 1px solid black; width: 30%;">Price</th>
-                  <th style="text-align: right; padding: 2px 0; border-bottom: 1px solid black; border-top: 1px solid black; width: 30%;">Dis.</th>
-                  <th style="text-align: right; padding: 2px 0; border-bottom: 1px solid black; border-top: 1px solid black; width: 30%;">Total</th>
-                </tr>
-              </thead>
-              <tbody>${thermalItemsHtml}</tbody>
-            </table>
-            <table style="width: 100%; margin-top: 5px; font-size: 8.5pt;">
-              <tr><td style="text-align: right; padding-right: 10px;">Subtotal:</td><td style="text-align: right;">${parseFloat(saleData.subtotal).toFixed(2)}</td></tr>
-              ${parseFloat(saleData.discount) > 0 ? `<tr><td style="text-align: right; padding-right: 10px; color: #059669;">Advance / Dis:</td><td style="text-align: right; color: #059669;">- ${parseFloat(saleData.discount).toFixed(2)}</td></tr>` : ''}
-              <tr style="border-top: 1px solid black;"><td style="text-align: right; padding-right: 10px; font-size: 10pt; font-weight: bold;">Amount Paid:</td><td style="text-align: right; font-size: 10pt; font-weight: bold;">LKR ${parseFloat(saleData.total).toFixed(2)}</td></tr>
-            </table>
-            <div style="text-align: center; margin-top: 12px; font-size: 8pt; border-top: 1px dashed #666; padding-top: 5px;">
-              <p style="margin: 0;">Thank you for trusting Universe Hub Repair Lab!</p>
-              <p style="margin: 2px 0 0 0; font-size: 7pt; color: #555;">Please bring this bill for any warranty claims.</p>
-            </div>
-          </body>
-        </html>
-      `;
-    } else {
-      // EPSON LQ-310 Dot Matrix / Warranty Format
-      const dotMatrixItemsHtml = billItems.map((item, index) => {
-        const itemTotal = (item.quantity * item.price_at_sale) - ((item.discount || 0) * item.quantity);
-        const name = item.saleable?.name || item.name || 'Repair Service';
-        const warranty = item.saleable?.warranty_period_months;
-        return `
-          <tr>
-            <td style="padding: 3px 5px; text-align: left;">${index + 1}.</td>
-            <td style="padding: 3px 5px; text-align: left;">
-              ${name}
-              ${warranty ? `<br/><small>(${warranty} Months Warranty)</small>` : ''}
-            </td>
-            <td style="padding: 3px 5px; text-align: right;">${item.quantity}</td>
-            <td style="padding: 3px 5px; text-align: right;">${parseFloat(item.price_at_sale).toFixed(2)}</td>
-            <td style="padding: 3px 5px; text-align: right;">${parseFloat(item.discount || 0).toFixed(2)}</td>
-            <td style="padding: 3px 5px; text-align: right; font-weight: bold;">${itemTotal.toFixed(2)}</td>
-          </tr>
-        `;
-      }).join('');
-
-      billHtml = `
-        <!DOCTYPE html>
-        <html>
-          <body style="font-family: 'Courier New', monospace; font-size: 10pt; width: 100%; padding: 0.1in;">
-            <div style="text-align: center; margin-bottom: 10px;">
-              <h1 style="font-size: 16pt; margin: 0; font-weight: bold;">UNIVERSE HUB</h1>
-              <p style="margin: 0; font-size: 9pt;">188/8 C, High Level Road, Maharagama</p>
-              <p style="margin: 0; font-size: 9pt;">Hotline: 074-021-9239</p>
-            </div>
-            <h2 style="font-size: 10pt; border-top: 1px dashed black; border-bottom: 1px dashed black; padding: 4px 0; text-align: center;">REPAIR WARRANTY INVOICE</h2>
-            <table style="width: 100%; font-size: 8.5pt; margin-top: 8px;">
-              <tr><td><strong>Invoice #:</strong> ${saleData.id}</td><td style="text-align: right;"><strong>Date:</strong> ${formattedDate}</td></tr>
-              <tr><td><strong>Cashier:</strong> ${saleData.user?.name || user?.name || 'Staff'}</td><td style="text-align: right;"><strong>Customer:</strong> ${saleData.customer_name}</td></tr>
-              ${saleData.customer_phone ? `<tr><td><strong>Phone:</strong> ${saleData.customer_phone}</td><td></td></tr>` : ''}
-            </table>
-            <hr style="border: 1px dashed black; margin: 8px 0;" />
-            <table style="width: 100%; font-size: 8.5pt; border-collapse: collapse;">
-              <thead>
-                <tr style="border-bottom: 1px solid black;">
-                  <th style="text-align: left; padding: 2px;">#</th>
-                  <th style="text-align: left; padding: 2px;">Item / Service</th>
-                  <th style="text-align: right; padding: 2px;">Qty</th>
-                  <th style="text-align: right; padding: 2px;">Price</th>
-                  <th style="text-align: right; padding: 2px;">Dis.</th>
-                  <th style="text-align: right; padding: 2px;">Total</th>
-                </tr>
-              </thead>
-              <tbody>${dotMatrixItemsHtml}</tbody>
-            </table>
-            <hr style="border: 1px dashed black; margin: 8px 0;" />
-            <table style="width: 100%; font-size: 8.5pt;">
-              <tr><td style="text-align: right; width: 80%;">Subtotal:</td><td style="text-align: right;">LKR ${parseFloat(saleData.subtotal).toFixed(2)}</td></tr>
-              ${parseFloat(saleData.discount) > 0 ? `<tr><td style="text-align: right; width: 80%;">Advance / Discount:</td><td style="text-align: right;">- LKR ${parseFloat(saleData.discount).toFixed(2)}</td></tr>` : ''}
-              <tr><td style="text-align: right; width: 80%; font-size: 10pt; font-weight: bold;">Grand Total:</td><td style="text-align: right; font-size: 10pt; font-weight: bold;">LKR ${parseFloat(saleData.total).toFixed(2)}</td></tr>
-            </table>
-            <div style="text-align: center; margin-top: 15px; font-size: 8.5pt;">
-              <p>Thank you for trusting Universe Hub Repair Lab!</p>
-            </div>
-          </body>
-        </html>
-      `;
-    }
-
-    if (isConnected && window.qz) {
-      try {
-        const config = window.qz.configs.create(printerName, 
-          printerType === 'thermal'
-            ? { size: { width: 76 }, units: 'mm', margins: { top: 0, right: 0, bottom: 0, left: 0 } }
-            : { size: { width: 9.5, height: 5.5 }, units: 'in', margins: { top: 0.25, right: 0.25, bottom: 0.25, left: 0.25 } }
-        );
-        const data = [{ type: 'html', format: 'plain', data: billHtml }];
-        await print(config, data);
-        toast({ title: "Printed Successfully", description: `Final Bill sent to ${printerName}.` });
-        return;
-      } catch (e) {
-        console.warn("QZ Tray printing failed, falling back to browser print:", e);
-      }
-    }
-
-    // Direct Browser Print Fallback
-    printViaBrowser(billHtml);
   };
 
   // ==========================================
@@ -689,7 +442,7 @@ export function Repairs() {
         issue_type: intakeForm.issueType,
         issue_description: fullIssueDesc,
         estimated_cost: estCost,
-        status: 'Received',
+        status: intakeForm.status || 'Received',
         created_at: new Date().toISOString()
       };
 
@@ -756,6 +509,7 @@ export function Repairs() {
         advancePaid: '',
         advancePaymentMethod: 'cash',
         expectedDate: '',
+        status: 'Received',
       });
 
       // Switch to active repairs view
@@ -773,8 +527,17 @@ export function Repairs() {
   };
 
   // ==========================================
-  // STATUS UPDATE: 1-Click for Technicians
+  // STATUS UPDATE: 1-Click for Technicians & Admin
   // ==========================================
+  const getStatusStepNumber = (status = '') => {
+    const s = (status || '').toLowerCase();
+    if (s.includes('complete')) return 5;
+    if (s.includes('ready')) return 4;
+    if (s.includes('progress') || s.includes('process')) return 3;
+    if (s.includes('diag')) return 2;
+    return 1;
+  };
+
   const handleUpdateStatus = async (jobId, newStatus) => {
     try {
       const { error } = await webSupabase
@@ -790,7 +553,7 @@ export function Repairs() {
 
       toast({
         title: "Status Updated! ⚡",
-        description: `Marked as "${newStatus}". Website live tracker updated immediately!`,
+        description: `Marked as "${newStatus}". Website live tracker updated to Step ${getStatusStepNumber(newStatus)}/5!`,
       });
     } catch (err) {
       toast({
@@ -798,6 +561,28 @@ export function Repairs() {
         description: err.message,
         variant: "destructive"
       });
+    }
+  };
+
+  const handleMarkReadyForPickup = async (job) => {
+    try {
+      await handleUpdateStatus(job.id, 'Ready for Pickup');
+      
+      toast({
+        title: "✅ Marked Ready for Pickup!",
+        description: `Tracking #${job.ticket_number} is ready. Notify ${job.customer_name} via WhatsApp?`,
+        action: (
+          <Button
+            size="sm"
+            className="bg-[#25d366] text-black font-bold hover:bg-[#20ba59]"
+            onClick={() => handleSendWhatsApp({ ...job, status: 'Ready for Pickup' })}
+          >
+            Send WhatsApp 💬
+          </Button>
+        )
+      });
+    } catch (err) {
+      // Error handled in handleUpdateStatus
     }
   };
 
@@ -809,17 +594,31 @@ export function Repairs() {
     else if (!waPhone.startsWith('94')) waPhone = '94' + waPhone;
 
     const deviceName = `${job.device_brand || ''} ${job.device_model || 'Device'}`.trim();
-    const statusMsg = job.status === 'Ready for Pickup' 
-      ? `✅ GREAT NEWS! Your ${deviceName} repair is COMPLETE and READY FOR PICKUP at our front desk.`
-      : `Current repair status is: "${job.status}".`;
+    const estCost = parseFloat(job.estimated_cost) || 0;
+    const advMatch = (job.issue_description || '').match(/\[Adv Paid:\s*LKR\s*([0-9.]+)\]/);
+    const advPaid = parseFloat(job.advance_paid) || (advMatch ? parseFloat(advMatch[1]) : 0);
+    const balDue = Math.max(0, estCost - advPaid);
 
-    const msg = `Hello ${job.customer_name || 'Customer'}! 👋\nThis is Universe Hub Mobile Repair Lab (Maharagama).\n\n📱 Device: ${deviceName}\n🔖 Tracking ID: #${job.ticket_number}\n⚡ ${statusMsg}\n\nYou can track live progress anytime at:\n👉 https://universehub.store#repair-center\n\nHotline: 074-021-9239\nThank you!`;
+    let statusMsg = '';
+    if (job.status === 'Ready for Pickup') {
+      statusMsg = `✅ *GREAT NEWS!* Your ${deviceName} repair is *COMPLETED & READY FOR PICKUP*! 🎉\n💵 *Balance Payable:* LKR ${balDue.toFixed(2)}\n📍 *Pickup Desk:* Universe Hub Flagship Store, Maharagama (188/8 C High Level Rd).`;
+    } else if (job.status === 'Completed') {
+      statusMsg = `🎉 Your device repair is *COMPLETED & DELIVERED*. Thank you for choosing Universe Hub! Your repair warranty is active.`;
+    } else if (job.status === 'In Progress') {
+      statusMsg = `⚙️ Your device is currently *UNDERGOING REPAIR* by our certified technicians using genuine parts.`;
+    } else if (job.status === 'Diagnostic') {
+      statusMsg = `🔍 Your device is currently undergoing *HARDWARE DIAGNOSTIC & TESTING* on our lab bench.`;
+    } else {
+      statusMsg = `📥 Your device has been safely *CHECKED IN* at Universe Hub repair queue.`;
+    }
+
+    const msg = `Hello ${job.customer_name || 'Customer'}! 👋\nThis is Universe Hub Mobile Repair Lab (Maharagama).\n\n📱 *Device:* ${deviceName}\n🔖 *Tracking ID:* #${job.ticket_number}\n⚡ *Status:* ${statusMsg}\n\n🌐 *Live Web Tracking:* https://universehub.store#repair-center\n📞 *Hotline:* 074-021-9239\nThank you!`;
 
     window.open(`https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
   // ==========================================
-  // FINAL DELIVERY & BALANCE SETTLEMENT MODAL
+  // FINAL DELIVERY & BALANCE SETTLEMENT
   // ==========================================
   const handleOpenSettleDialog = (job) => {
     setSettlingJob(job);
@@ -858,7 +657,7 @@ export function Repairs() {
   };
 
   // ==========================================
-  // QUICK BILLING / FINAL REPAIR SALES CHECKOUT
+  // DIRECT REPAIR BILLING (Original Checkout Flow)
   // ==========================================
   const addRepairToCart = (e) => {
     e.preventDefault();
@@ -882,7 +681,7 @@ export function Repairs() {
     setCart([...cart, newItem]);
     setDirectRepairForm({
       name: '',
-      warrantyPeriod: '3',
+      warrantyPeriod: '',
       sellingPrice: '',
       discount: '',
       costPrice: ''
@@ -924,16 +723,16 @@ export function Repairs() {
            name: item.name,
            category: 'Repair',
            sku: 'REP-' + Date.now() + Math.floor(Math.random()*1000),
-           barcode: item.jobTicketNumber || ('REP-' + Date.now() + Math.floor(Math.random()*1000)),
+           barcode: 'REP-' + Date.now() + Math.floor(Math.random()*1000),
            quantity: 1, 
            min_stock_level: 0,
-           cost_price: item.costPrice || 0,
+           cost_price: item.costPrice,
            selling_price: item.sellingPrice,
-           warranty_period_months: item.warrantyPeriod || 0,
+           warranty_period_months: item.warrantyPeriod,
            product_type: 'general' 
         }]).select('id, name, warranty_period_months').single();
         
-        if (error) throw new Error("Failed to record repair service in DB: " + error.message);
+        if (error) throw new Error("Failed to create repair product: " + error.message);
         
         transformedCart.push({
            id: data.id,
@@ -959,42 +758,8 @@ export function Repairs() {
       };
 
       const newSaleData = await addSale(salePayload);
+      toast({ title: "Direct Repair Billed", description: `Total: LKR ${newSaleData.total}` });
 
-      // If this checkout was linked to an active repair job, mark it as 'Completed' in Web Supabase
-      const linkedJob = activeLinkedJob || cart.find(i => i.jobTicketNumber);
-      if (linkedJob) {
-        const ticketCode = linkedJob.ticket_number || linkedJob.jobTicketNumber;
-        try {
-          await webSupabase
-            .from('repair_orders')
-            .update({ status: 'Completed' })
-            .eq('ticket_number', ticketCode);
-
-          setRepairJobs(prev => prev.map(j => 
-            j.ticket_number === ticketCode ? { ...j, status: 'Completed' } : j
-          ));
-        } catch (e) {
-          console.warn("Could not update linked repair status to Completed:", e);
-        }
-      }
-
-      toast({ 
-        title: "Final Repair Bill Recorded! 🎉", 
-        description: `Total: LKR ${newSaleData.total}. Status updated to Completed.` 
-      });
-
-      // Print the chosen bill format (Thermal or EPSON)
-      const printData = {
-        ...newSaleData,
-        items: newSaleData.items.map((it, idx) => ({
-          ...it,
-          saleable: { ...it.saleable, name: cart[idx]?.name || 'Repair Service' }
-        }))
-      };
-
-      await handlePrintFinalBill(printData, printerType);
-
-      // Reset Quick Billing
       setCart([]);
       setDirectCustomerName('');
       setDirectCustomerEmail('');
@@ -1003,8 +768,6 @@ export function Repairs() {
       setPaymentCard(0);
       setPaymentTransfer(0);
       setPaymentKoko(0);
-      setActiveLinkedJob(null);
-      setTrackingLookup('');
     } catch (err) {
       toast({ title: "Checkout Failed", description: err.message, variant: "destructive" });
     } finally {
@@ -1063,7 +826,7 @@ export function Repairs() {
             Mobile Repair Lab
           </h1>
           <p className="text-cosmic-titanium text-sm sm:text-base mt-1">
-            Intake handover receipts, technician job slip, final sales billing & live web tracking
+            Intake handover receipts, dual slips, technician mobile workbench & live web tracking
           </p>
         </div>
 
@@ -1096,7 +859,7 @@ export function Repairs() {
             onClick={() => setActiveTab('direct')}
           >
             <Receipt className="w-4 h-4 mr-2" />
-            Quick / Final Billing
+            Quick Billing
           </Button>
         </div>
       </div>
@@ -1113,7 +876,7 @@ export function Repairs() {
                 <div className="relative flex-1">
                   <Search className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
                   <Input
-                    placeholder="Search by Tracking Code (e.g. UH-5130), Customer, Phone, Model..."
+                    placeholder="Search by Tracking Code (e.g. UH-8821), Customer, Phone, Model..."
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
                     className="pl-9 bg-white/10 border-white/20 text-white placeholder:text-gray-400"
@@ -1161,9 +924,6 @@ export function Repairs() {
               const passcodeMatch = (job.issue_description || '').match(/\[Passcode:\s*([^\]]+)\]/);
               const extractedPasscode = passcodeMatch ? passcodeMatch[1] : '';
               
-              const advMatch = (job.issue_description || '').match(/\[Adv Paid:\s*LKR\s*([0-9.]+)\]/);
-              const advPaid = parseFloat(job.advance_paid) || (advMatch ? parseFloat(advMatch[1]) : 0);
-
               const cleanDesc = (job.issue_description || '')
                 .replace(/\[Passcode:\s*[^\]]+\]/g, '')
                 .replace(/\[Cond:\s*[^\]]+\]/g, '')
@@ -1172,7 +932,6 @@ export function Repairs() {
                 .trim();
 
               const estCost = parseFloat(job.estimated_cost) || 0;
-              const balanceDue = Math.max(0, estCost - advPaid);
               const isCompleted = (job.status || '').toLowerCase().includes('complete');
 
               return (
@@ -1223,36 +982,47 @@ export function Repairs() {
                         </div>
                       )}
 
-                      {/* Est. Cost & Balance */}
-                      <div className="p-2 rounded-lg bg-white/5 space-y-1 text-xs">
-                        <div className="flex items-center justify-between text-gray-300">
-                          <span>Est. Cost:</span>
-                          <span className="font-bold text-white">LKR {estCost.toFixed(2)}</span>
-                        </div>
-                        {advPaid > 0 && (
-                          <div className="flex items-center justify-between text-emerald-400">
-                            <span>Advance Paid:</span>
-                            <span>LKR {advPaid.toFixed(2)}</span>
-                          </div>
-                        )}
-                        <div className="flex items-center justify-between text-rose-300 font-bold border-t border-white/10 pt-1">
-                          <span>Balance Due:</span>
-                          <span>LKR {balanceDue.toFixed(2)}</span>
-                        </div>
+                      {/* Est. Cost */}
+                      <div className="flex items-center justify-between text-xs text-gray-300 pt-1">
+                        <span>Est. Cost:</span>
+                        <span className="font-bold text-white">LKR {estCost.toFixed(2)}</span>
                       </div>
                     </div>
 
                     {/* Technician Action Controls */}
                     <div className="pt-3 border-t border-white/10 space-y-2">
-                      <Label className="text-[11px] text-gray-400 uppercase tracking-wider block">
-                        Technician Quick Status:
-                      </Label>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[11px] text-gray-400 uppercase tracking-wider block">
+                          Update Status (Website Sync):
+                        </Label>
+                        <span className="text-[10px] text-cyan-400 font-mono font-semibold">
+                          Live Step {getStatusStepNumber(job.status)}/5
+                        </span>
+                      </div>
 
-                      <div className="grid grid-cols-2 gap-1.5">
+                      {/* 5 Status Options matching universehub.store */}
+                      <div className="grid grid-cols-3 gap-1.5">
                         <Button
                           size="sm"
                           variant="outline"
-                          className="h-8 text-[11px] border-white/15 bg-white/5 hover:bg-purple-600 hover:text-white"
+                          className={`h-8 text-[11px] font-semibold transition-all ${
+                            (job.status || '').toLowerCase() === 'received'
+                              ? 'bg-blue-600 text-white border-blue-400 shadow-md ring-1 ring-blue-400'
+                              : 'border-white/15 bg-white/5 hover:bg-blue-600/40 text-gray-300'
+                          }`}
+                          onClick={() => handleUpdateStatus(job.id, 'Received')}
+                        >
+                          📥 Received
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className={`h-8 text-[11px] font-semibold transition-all ${
+                            (job.status || '').toLowerCase().includes('diag')
+                              ? 'bg-purple-600 text-white border-purple-400 shadow-md ring-1 ring-purple-400'
+                              : 'border-white/15 bg-white/5 hover:bg-purple-600/40 text-gray-300'
+                          }`}
                           onClick={() => handleUpdateStatus(job.id, 'Diagnostic')}
                         >
                           🔍 Diagnostic
@@ -1261,51 +1031,73 @@ export function Repairs() {
                         <Button
                           size="sm"
                           variant="outline"
-                          className="h-8 text-[11px] border-white/15 bg-white/5 hover:bg-amber-600 hover:text-white"
+                          className={`h-8 text-[11px] font-semibold transition-all ${
+                            (job.status || '').toLowerCase().includes('progress') || (job.status || '').toLowerCase().includes('process')
+                              ? 'bg-amber-600 text-white border-amber-400 shadow-md ring-1 ring-amber-400'
+                              : 'border-white/15 bg-white/5 hover:bg-amber-600/40 text-gray-300'
+                          }`}
                           onClick={() => handleUpdateStatus(job.id, 'In Progress')}
                         >
-                          ⚙️ In Progress
-                        </Button>
-
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-8 text-[11px] border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-600 text-emerald-300 hover:text-white font-semibold"
-                          onClick={() => handleUpdateStatus(job.id, 'Ready for Pickup')}
-                        >
-                          ✅ Ready Pickup
-                        </Button>
-
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-8 text-[11px] border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-600 text-cyan-300 hover:text-white font-bold"
-                          onClick={() => loadJobIntoQuickBilling(job)}
-                          title="Convert this repair directly into Final Sales Bill"
-                        >
-                          🧾 Final Bill <ArrowRight className="w-3 h-3 ml-1" />
+                          ⚙️ In Process
                         </Button>
                       </div>
 
-                      {/* Secondary Actions: WhatsApp & Tech Bill */}
-                      <div className="grid grid-cols-2 gap-2 pt-1">
+                      <div className="grid grid-cols-2 gap-1.5">
                         <Button
                           size="sm"
-                          className="h-9 text-xs bg-[#25d366] hover:bg-[#20ba59] text-black font-bold rounded-xl shadow-sm"
-                          onClick={() => handleSendWhatsApp(job)}
-                          title="Send Customer WhatsApp Notification"
+                          variant="outline"
+                          className={`h-9 text-[11px] font-bold transition-all ${
+                            (job.status || '').toLowerCase().includes('ready')
+                              ? 'bg-emerald-600 text-white border-emerald-400 shadow-lg shadow-emerald-500/20 ring-1 ring-emerald-400'
+                              : 'border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-600 text-emerald-300 hover:text-white'
+                          }`}
+                          onClick={() => handleMarkReadyForPickup(job)}
                         >
-                          <MessageCircle className="w-4 h-4 mr-1.5" /> WhatsApp
+                          ✅ Ready for Pickup
                         </Button>
 
                         <Button
                           size="sm"
                           variant="outline"
-                          className="h-9 text-xs border-amber-500/50 bg-amber-500/15 hover:bg-amber-500 hover:text-black text-amber-300 font-bold rounded-xl shadow-sm transition-all"
+                          className={`h-9 text-[11px] font-bold transition-all ${
+                            (job.status || '').toLowerCase().includes('complete')
+                              ? 'bg-cyan-600 text-white border-cyan-400 shadow-lg shadow-cyan-500/20 ring-1 ring-cyan-400'
+                              : 'border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-600 text-cyan-300 hover:text-white'
+                          }`}
+                          onClick={() => handleOpenSettleDialog(job)}
+                        >
+                          🎉 Completed
+                        </Button>
+                      </div>
+
+                      {/* Convert to Final Bill Button */}
+                      <Button
+                        size="sm"
+                        className="w-full h-8 text-xs bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-xl shadow-md flex items-center justify-center gap-1.5"
+                        onClick={() => loadJobIntoQuickBilling(job)}
+                      >
+                        <Receipt className="w-3.5 h-3.5" /> Convert to Final Bill →
+                      </Button>
+
+                      {/* Secondary Actions: WhatsApp & Technician Bill */}
+                      <div className="grid grid-cols-2 gap-2 pt-0.5">
+                        <Button
+                          size="sm"
+                          className="h-8 text-xs bg-[#25d366] hover:bg-[#20ba59] text-black font-bold rounded-xl shadow-sm"
+                          onClick={() => handleSendWhatsApp(job)}
+                          title="Send Customer WhatsApp Notification"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5 mr-1" /> WhatsApp
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 text-xs border-amber-500/50 bg-amber-500/15 hover:bg-amber-500 hover:text-black text-amber-300 font-bold rounded-xl shadow-sm transition-all"
                           onClick={() => handlePrintSlips(job, 'technician')}
                           title="Print Technician Job Sheet"
                         >
-                          <Printer className="w-4 h-4 mr-1.5" /> Tech Bill 🖨️
+                          <Printer className="w-3.5 h-3.5 mr-1" /> Tech Bill 🖨️
                         </Button>
                       </div>
 
@@ -1315,7 +1107,7 @@ export function Repairs() {
                           className="text-[11px] text-gray-400 hover:text-cyan-300 transition-colors flex items-center gap-1 cursor-pointer"
                           onClick={() => handlePrintSlips(job, 'customer')}
                         >
-                          <FileText className="w-3 h-3" /> Print Customer Handover Slip
+                          <FileText className="w-3 h-3" /> Print Customer Bill
                         </button>
                       </div>
                     </div>
@@ -1336,7 +1128,7 @@ export function Repairs() {
       )}
 
       {/* ======================================================== */}
-      {/* TAB 2: NEW DEVICE INTAKE & HANDOVER RECEIPT             */}
+      {/* TAB 2: NEW DEVICE INTAKE & DUAL SLIP PRINTING           */}
       {/* ======================================================== */}
       {activeTab === 'intake' && (
         <Card className="glass-effect border-white/10 shadow-2xl">
@@ -1565,7 +1357,7 @@ export function Repairs() {
                 <h3 className="text-sm font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-2">
                   <DollarSign className="w-4 h-4" /> 4. Pricing & Delivery Time
                 </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
                   <div>
                     <Label htmlFor="estCost">Estimated Total Cost (LKR)</Label>
                     <Input
@@ -1614,11 +1406,30 @@ export function Repairs() {
                     <Label htmlFor="expectedDate">Target Ready Time</Label>
                     <Input
                       id="expectedDate"
-                      placeholder="e.g. Today 6:00 PM or 12/11"
+                      placeholder="e.g. Today 5:30 PM"
                       value={intakeForm.expectedDate}
                       onChange={e => setIntakeForm({ ...intakeForm, expectedDate: e.target.value })}
                       className="bg-white/10 border-white/20 text-white mt-1"
                     />
+                  </div>
+
+                  <div>
+                    <Label className="text-cyan-300 font-semibold">Initial Job Status</Label>
+                    <Select 
+                      value={intakeForm.status} 
+                      onValueChange={v => setIntakeForm({ ...intakeForm, status: v })}
+                    >
+                      <SelectTrigger className="bg-white/10 border-cyan-500/40 text-white mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Received">📥 Received (Step 1)</SelectItem>
+                        <SelectItem value="Diagnostic">🔍 Diagnostic (Step 2)</SelectItem>
+                        <SelectItem value="In Progress">⚙️ In Process (Step 3)</SelectItem>
+                        <SelectItem value="Ready for Pickup">✅ Ready for Pickup (Step 4)</SelectItem>
+                        <SelectItem value="Completed">🎉 Completed (Step 5)</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 
@@ -1648,328 +1459,234 @@ export function Repairs() {
       )}
 
       {/* ======================================================== */}
-      {/* TAB 3: QUICK / FINAL REPAIR BILLING                     */}
+      {/* TAB 3: QUICK DIRECT BILLING (Original Checkout Flow)    */}
       {/* ======================================================== */}
       {activeTab === 'direct' && (
-        <div className="space-y-4">
-          {/* Top Bar: Load from Repair Job / Tracking Code */}
-          <Card className="glass-effect border-cyan-500/30 bg-gradient-to-r from-blue-900/20 to-purple-900/20 shadow-xl">
-            <CardContent className="p-4">
-              <div className="flex flex-col md:flex-row items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <span className="p-2 rounded-xl bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                    <Search className="w-5 h-5" />
-                  </span>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
+            <Card className="glass-effect border-white/10 shadow-xl">
+              <CardHeader><CardTitle className="text-2xl text-white">Add Direct Repair Item</CardTitle></CardHeader>
+              <CardContent>
+                <form onSubmit={addRepairToCart} className="space-y-4">
                   <div>
-                    <h3 className="font-bold text-white text-base">Load Repair Job by Tracking Code</h3>
-                    <p className="text-xs text-gray-300">
-                      Enter tracking code from customer slip (e.g. UH-5130) to load device, deduct advance & print final bill
-                    </p>
+                    <Label htmlFor="repairName">Repair / Part Name</Label>
+                    <Input 
+                      id="repairName" 
+                      value={directRepairForm.name} 
+                      onChange={e => setDirectRepairForm({...directRepairForm, name: e.target.value})} 
+                      placeholder="e.g., iPhone 11 Screen Replacement" 
+                      className="bg-white/10 border-white/20 text-white w-full"
+                      required
+                    />
                   </div>
-                </div>
-
-                <div className="flex items-center gap-2 w-full md:w-auto">
-                  <Input
-                    placeholder="Enter Tracking # (e.g. UH-5130)"
-                    value={trackingLookup}
-                    onChange={e => setTrackingLookup(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') handleLookupRepairJob(trackingLookup); }}
-                    className="w-full md:w-64 bg-white/10 border-white/20 text-white font-mono uppercase"
-                  />
-                  <Button
-                    onClick={() => handleLookupRepairJob(trackingLookup)}
-                    className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold px-4 shrink-0 shadow-md"
-                  >
-                    <CheckCircle2 className="w-4 h-4 mr-1.5" /> Load Bill
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Billing Form & Cart Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-6">
-              <Card className="glass-effect border-white/10 shadow-xl">
-                <CardHeader>
-                  <CardTitle className="text-xl text-white flex items-center justify-between">
-                    <span>Add Item / Service to Bill</span>
-                    {activeLinkedJob && (
-                      <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/40 text-xs">
-                        Linked: #{activeLinkedJob.ticket_number}
-                      </Badge>
-                    )}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <form onSubmit={addRepairToCart} className="space-y-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div>
-                      <Label htmlFor="repairName">Repair / Part Name</Label>
+                      <Label htmlFor="repairPrice">Price (LKR)</Label>
                       <Input 
-                        id="repairName" 
-                        value={directRepairForm.name} 
-                        onChange={e => setDirectRepairForm({...directRepairForm, name: e.target.value})} 
-                        placeholder="e.g., iPhone 11 Screen Replacement" 
-                        className="bg-white/10 border-white/20 text-white w-full"
+                        id="repairPrice" 
+                        type="number"
+                        step="0.01"
+                        value={directRepairForm.sellingPrice} 
+                        onChange={e => setDirectRepairForm({...directRepairForm, sellingPrice: e.target.value})} 
+                        placeholder="0.00" 
+                        className="bg-white/10 border-white/20 text-white"
                         required
                       />
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div>
-                        <Label htmlFor="repairPrice">Price (LKR)</Label>
-                        <Input 
-                          id="repairPrice" 
-                          type="number"
-                          step="0.01"
-                          value={directRepairForm.sellingPrice} 
-                          onChange={e => setDirectRepairForm({...directRepairForm, sellingPrice: e.target.value})} 
-                          placeholder="0.00" 
-                          className="bg-white/10 border-white/20 text-white font-semibold"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="repairWarranty">Warranty (Months)</Label>
-                        <Input 
-                          id="repairWarranty" 
-                          type="number"
-                          value={directRepairForm.warrantyPeriod} 
-                          onChange={e => setDirectRepairForm({...directRepairForm, warrantyPeriod: e.target.value})} 
-                          placeholder="e.g. 3" 
-                          className="bg-white/10 border-white/20 text-white"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="repairDiscount">Discount / Advance (LKR)</Label>
-                        <Input 
-                          id="repairDiscount" 
-                          type="number"
-                          step="0.01"
-                          value={directRepairForm.discount} 
-                          onChange={e => setDirectRepairForm({...directRepairForm, discount: e.target.value})} 
-                          placeholder="0.00" 
-                          className="bg-white/10 border-white/20 text-white"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="repairCost">c (LKR Cost)</Label>
-                        <Input 
-                          id="repairCost" 
-                          type="number"
-                          step="0.01"
-                          value={directRepairForm.costPrice} 
-                          onChange={e => setDirectRepairForm({...directRepairForm, costPrice: e.target.value})} 
-                          placeholder="0.00" 
-                          className="bg-white/10 border-white/20 text-white"
-                        />
-                      </div>
-                    </div>
-                    <Button type="submit" className="w-full mt-2"><Plus className="w-4 h-4 mr-2" /> Add Item to Cart</Button>
-                  </form>
-                </CardContent>
-              </Card>
-
-              {/* Cart Table */}
-              <Card className="glass-effect border-white/10 shadow-xl">
-                <CardHeader>
-                  <CardTitle className="text-xl text-white flex items-center justify-between">
-                    <span>Items for Final Billing ({cart.length})</span>
-                    {cart.length > 0 && (
-                      <span className="text-sm font-normal text-cyan-300">
-                        Net Total: LKR {grandTotal.toFixed(2)}
-                      </span>
-                    )}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-[5%]">#</TableHead>
-                        <TableHead>Service / Item</TableHead>
-                        <TableHead>Price</TableHead>
-                        <TableHead>Qty</TableHead>
-                        <TableHead>Advance/Dis.</TableHead>
-                        <TableHead>Balance</TableHead>
-                        <TableHead></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {cart.map((item, index) => (
-                        <TableRow key={item.uniqueCartId}>
-                          <TableCell>{index + 1}</TableCell>
-                          <TableCell>
-                            <div className="font-semibold text-white">{item.name}</div>
-                            {item.warrantyPeriod > 0 && (
-                              <div className="text-xs text-cyan-400 mt-0.5">
-                                {item.warrantyPeriod} Month{item.warrantyPeriod > 1 ? 's' : ''} Warranty
-                              </div>
-                            )}
-                            {item.advancePaid > 0 && (
-                              <div className="text-xs text-emerald-400 mt-0.5">
-                                Advance Credited: LKR {item.advancePaid.toFixed(2)}
-                              </div>
-                            )}
-                          </TableCell>
-                          <TableCell>LKR {item.sellingPrice.toFixed(2)}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Button size="sm" variant="outline" onClick={() => updateQuantity(item.uniqueCartId, item.quantity - 1)}><Minus className="w-3 h-3" /></Button>
-                              <span>{item.quantity}</span>
-                              <Button size="sm" variant="outline" onClick={() => updateQuantity(item.uniqueCartId, item.quantity + 1)}><Plus className="w-3 h-3" /></Button>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="text"
-                              value={item.discount}
-                              onBlur={(e) => updateItemDiscount(item.uniqueCartId, e.target.value || '0')}
-                              onChange={(e) => updateItemDiscount(item.uniqueCartId, e.target.value)}
-                              className="w-20 bg-white/10 border-white/20 text-right text-xs"
-                              placeholder="0.00"
-                            />
-                          </TableCell>
-                          <TableCell className="font-bold text-white">
-                            LKR {((item.sellingPrice - (parseFloat(item.discount) || 0)) * item.quantity).toFixed(2)}
-                          </TableCell>
-                          <TableCell>
-                            <Button size="sm" variant="destructive" onClick={() => updateQuantity(item.uniqueCartId, 0)}><Trash2 className="w-4 h-4" /></Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      {cart.length === 0 && (
-                        <TableRow>
-                          <TableCell colSpan={7} className="text-center text-gray-400 py-8">
-                            Cart is empty. Use the search bar above to load by tracking number (e.g. UH-5130) or add manually.
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Payment & Print Section */}
-            <div className="space-y-6">
-              <Card className="glass-effect border-white/10 shadow-xl">
-                <CardHeader><CardTitle className="text-xl text-white">Customer & Payment</CardTitle></CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <Label htmlFor="directCustomer">Customer Name</Label>
-                    <div className="flex gap-2 mt-1">
-                      <Select value={directCustomerTitle} onValueChange={setDirectCustomerTitle}>
-                        <SelectTrigger className="w-[85px] bg-white/10 border-white/20 text-white">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Mr.">Mr.</SelectItem>
-                          <SelectItem value="Mrs.">Mrs.</SelectItem>
-                          <SelectItem value="Miss">Miss</SelectItem>
-                          <SelectItem value="Dr.">Dr.</SelectItem>
-                        </SelectContent>
-                      </Select>
+                    <div>
+                      <Label htmlFor="repairWarranty">Warranty (Months)</Label>
                       <Input 
-                        id="directCustomer" 
-                        className="flex-1 bg-white/10 border-white/20 text-white font-medium" 
-                        value={directCustomerName} 
-                        onChange={(e) => setDirectCustomerName(e.target.value)} 
-                        placeholder="Customer Name" 
+                        id="repairWarranty" 
+                        type="number"
+                        value={directRepairForm.warrantyPeriod} 
+                        onChange={e => setDirectRepairForm({...directRepairForm, warrantyPeriod: e.target.value})} 
+                        placeholder="e.g. 3" 
+                        className="bg-white/10 border-white/20 text-white"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="repairDiscount">Discount (LKR)</Label>
+                      <Input 
+                        id="repairDiscount" 
+                        type="number"
+                        step="0.01"
+                        value={directRepairForm.discount} 
+                        onChange={e => setDirectRepairForm({...directRepairForm, discount: e.target.value})} 
+                        placeholder="0.00" 
+                        className="bg-white/10 border-white/20 text-white"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="repairCost">c (LKR Cost)</Label>
+                      <Input 
+                        id="repairCost" 
+                        type="number"
+                        step="0.01"
+                        value={directRepairForm.costPrice} 
+                        onChange={e => setDirectRepairForm({...directRepairForm, costPrice: e.target.value})} 
+                        placeholder="0.00" 
+                        className="bg-white/10 border-white/20 text-white"
                       />
                     </div>
                   </div>
-                  <div>
-                    <Label htmlFor="directCustomerPhone">Customer Phone</Label>
+                  <Button type="submit" className="w-full mt-2"><Plus className="w-4 h-4 mr-2" /> Add to Cart</Button>
+                </form>
+              </CardContent>
+            </Card>
+
+            <Card className="glass-effect border-white/10 shadow-xl">
+              <CardHeader><CardTitle className="text-2xl text-white">Repair Cart ({cart.length})</CardTitle></CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[5%]">#</TableHead>
+                      <TableHead>Item</TableHead>
+                      <TableHead>Price</TableHead>
+                      <TableHead>Qty</TableHead>
+                      <TableHead>Discount</TableHead>
+                      <TableHead>Total</TableHead>
+                      <TableHead></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {cart.map((item, index) => (
+                      <TableRow key={item.uniqueCartId}>
+                        <TableCell>{index + 1}</TableCell>
+                        <TableCell>
+                          <div className="font-medium text-white">{item.name}</div>
+                          {item.warrantyPeriod > 0 && (
+                            <div className="text-xs text-cyan-400 mt-1">
+                              {item.warrantyPeriod} Month{item.warrantyPeriod > 1 ? 's' : ''} Warranty
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>LKR {item.sellingPrice.toFixed(2)}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Button size="sm" variant="outline" onClick={() => updateQuantity(item.uniqueCartId, item.quantity - 1)}><Minus className="w-3 h-3" /></Button>
+                            <span>{item.quantity}</span>
+                            <Button size="sm" variant="outline" onClick={() => updateQuantity(item.uniqueCartId, item.quantity + 1)}><Plus className="w-3 h-3" /></Button>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="text"
+                            value={item.discount}
+                            onBlur={(e) => updateItemDiscount(item.uniqueCartId, e.target.value || '0')}
+                            onChange={(e) => updateItemDiscount(item.uniqueCartId, e.target.value)}
+                            className="w-20 bg-white/10 border-white/20 text-right"
+                            placeholder="0.00"
+                          />
+                        </TableCell>
+                        <TableCell>LKR {((item.sellingPrice - (parseFloat(item.discount) || 0)) * item.quantity).toFixed(2)}</TableCell>
+                        <TableCell><Button size="sm" variant="destructive" onClick={() => updateQuantity(item.uniqueCartId, 0)}><Trash2 className="w-4 h-4" /></Button></TableCell>
+                      </TableRow>
+                    ))}
+                    {cart.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-gray-400 py-6">No direct repairs added yet.</TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="space-y-6">
+            <Card className="glass-effect border-white/10 shadow-xl">
+              <CardHeader><CardTitle className="text-2xl text-white">Payment</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label htmlFor="directCustomer">Customer Name</Label>
+                  <div className="flex gap-2 mt-1">
+                    <Select value={directCustomerTitle} onValueChange={setDirectCustomerTitle}>
+                      <SelectTrigger className="w-[100px] bg-white/10 border-white/20 text-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Mr.">Mr.</SelectItem>
+                        <SelectItem value="Mrs.">Mrs.</SelectItem>
+                        <SelectItem value="Miss">Miss</SelectItem>
+                        <SelectItem value="Dr.">Dr.</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <Input 
-                      id="directCustomerPhone" 
-                      value={directCustomerPhone} 
-                      onChange={(e) => setDirectCustomerPhone(e.target.value)} 
-                      placeholder="07X XXX XXXX" 
-                      className="bg-white/10 border-white/20 text-white mt-1" 
+                      id="directCustomer" 
+                      className="flex-1 bg-white/10 border-white/20 text-white" 
+                      value={directCustomerName} 
+                      onChange={(e) => setDirectCustomerName(e.target.value)} 
+                      placeholder="Walk-in Customer" 
                     />
                   </div>
-                  <div>
-                    <Label htmlFor="directCustomerEmail">Customer Email (Optional)</Label>
-                    <Input 
-                      id="directCustomerEmail" 
-                      type="email" 
-                      value={directCustomerEmail} 
-                      onChange={(e) => setDirectCustomerEmail(e.target.value)} 
-                      placeholder="customer@gmail.com" 
-                      className="bg-white/10 border-white/20 text-white mt-1" 
-                    />
-                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="directCustomerPhone">Customer Phone</Label>
+                  <Input 
+                    id="directCustomerPhone" 
+                    value={directCustomerPhone} 
+                    onChange={(e) => setDirectCustomerPhone(e.target.value)} 
+                    placeholder="07X XXX XXXX" 
+                    className="bg-white/10 border-white/20 text-white" 
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="directCustomerEmail">Customer Email</Label>
+                  <Input 
+                    id="directCustomerEmail" 
+                    type="email" 
+                    value={directCustomerEmail} 
+                    onChange={(e) => setDirectCustomerEmail(e.target.value)} 
+                    placeholder="customer@gmail.com" 
+                    className="bg-white/10 border-white/20 text-white" 
+                  />
+                </div>
 
-                  <div className="pt-2 border-t border-white/10">
-                    <Label className="text-xs uppercase tracking-wider text-gray-400 font-bold">Payments (LKR)</Label>
-                    <div className="grid grid-cols-2 gap-3 mt-2">
-                      <div>
-                        <Label className="text-xs text-gray-400">Cash</Label>
-                        <Input type="number" min="0" value={paymentCash} onChange={(e) => setPaymentCash(e.target.value)} className="bg-white/10 border-white/20 text-white font-semibold" />
-                      </div>
-                      <div>
-                        <Label className="text-xs text-gray-400">Card</Label>
-                        <Input type="number" min="0" value={paymentCard} onChange={(e) => setPaymentCard(e.target.value)} className="bg-white/10 border-white/20 text-white font-semibold" />
-                      </div>
-                      <div>
-                        <Label className="text-xs text-gray-400">Transfer</Label>
-                        <Input type="number" min="0" value={paymentTransfer} onChange={(e) => setPaymentTransfer(e.target.value)} className="bg-white/10 border-white/20 text-white font-semibold" />
-                      </div>
-                      <div>
-                        <Label className="text-xs text-gray-400">Koko</Label>
-                        <Input type="number" min="0" value={paymentKoko} onChange={(e) => setPaymentKoko(e.target.value)} className="bg-white/10 border-white/20 text-white font-semibold" />
-                      </div>
+                <div className="pt-2">
+                  <Label>Payments</Label>
+                  <div className="grid grid-cols-2 gap-4 mt-2">
+                    <div>
+                      <Label className="text-xs text-gray-400">Cash</Label>
+                      <Input type="number" min="0" value={paymentCash} onChange={(e) => setPaymentCash(e.target.value)} className="bg-white/10 border-white/20 text-white" />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-gray-400">Card</Label>
+                      <Input type="number" min="0" value={paymentCard} onChange={(e) => setPaymentCard(e.target.value)} className="bg-white/10 border-white/20 text-white" />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-gray-400">Transfer</Label>
+                      <Input type="number" min="0" value={paymentTransfer} onChange={(e) => setPaymentTransfer(e.target.value)} className="bg-white/10 border-white/20 text-white" />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-gray-400">Koko</Label>
+                      <Input type="number" min="0" value={paymentKoko} onChange={(e) => setPaymentKoko(e.target.value)} className="bg-white/10 border-white/20 text-white" />
                     </div>
                   </div>
+                </div>
 
-                  {/* Order Summary & Final Print Buttons */}
-                  <div className="border-t border-white/10 pt-4 space-y-3">
-                    <div className="space-y-1.5 text-sm">
-                      <div className="flex justify-between text-gray-300">
-                        <span>Total Service Value:</span>
-                        <span>LKR {subtotal.toFixed(2)}</span>
-                      </div>
-                      {totalDiscount > 0 && (
-                        <div className="flex justify-between text-emerald-400">
-                          <span>Advance / Discount:</span>
-                          <span>- LKR {totalDiscount.toFixed(2)}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between text-white font-bold text-lg border-t border-white/10 pt-2">
-                        <span>Balance Payable:</span>
-                        <span className="text-cyan-300">LKR {grandTotal.toFixed(2)}</span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3 pt-2">
-                      <Button 
-                        onClick={() => processDirectSale('thermal')} 
-                        className="w-full py-5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-bold text-sm shadow-lg"
-                        disabled={cart.length === 0 || isProcessingDirect}
-                      >
-                        <Receipt className="w-4 h-4 mr-1.5" />
-                        {isProcessingDirect ? 'Processing...' : 'Thermal Bill'}
-                      </Button>
-
-                      <Button 
-                        onClick={() => processDirectSale('epson')} 
-                        className="w-full py-5 rounded-2xl bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold text-sm shadow-lg"
-                        disabled={cart.length === 0 || isProcessingDirect}
-                      >
-                        <Printer className="w-4 h-4 mr-1.5" />
-                        {isProcessingDirect ? 'Processing...' : 'Warranty (EPSON)'}
-                      </Button>
-                    </div>
+                <div className="border-t border-white/10 pt-4 space-y-2">
+                  <div className="flex justify-between text-white font-bold text-lg">
+                    <span>Grand Total:</span>
+                    <span>LKR {grandTotal.toFixed(2)}</span>
                   </div>
-                </CardContent>
-              </Card>
-            </div>
+                  <Button 
+                    onClick={() => processDirectSale('thermal')} 
+                    className="w-full py-6 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-base shadow-lg"
+                    disabled={cart.length === 0 || isProcessingDirect}
+                  >
+                    <Receipt className="w-5 h-5 mr-2" />
+                    {isProcessingDirect ? 'Processing...' : 'Complete & Print Bill'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       )}
 
       {/* ======================================================== */}
-      {/* MODAL: SETTLE BALANCE & DELIVER COMPLETED PHONE          */}
+      {/* MODAL: COMPLETE REPAIR / DELIVER DEVICE                  */}
       {/* ======================================================== */}
       {settlingJob && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -1980,7 +1697,7 @@ export function Repairs() {
                 Complete Repair & Deliver Device
               </CardTitle>
               <CardDescription className="text-gray-300">
-                Mark job #{settlingJob.ticket_number} as Completed or convert to Final Bill
+                Mark job #{settlingJob.ticket_number} as Completed or convert to Final Sales Bill
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1999,35 +1716,50 @@ export function Repairs() {
                 </div>
               </div>
 
+              <div>
+                <Label>Balance Payment Method</Label>
+                <Select value={settlePaymentMethod} onValueChange={setSettlePaymentMethod}>
+                  <SelectTrigger className="bg-white/10 border-white/20 text-white mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="card">Card</SelectItem>
+                    <SelectItem value="transfer">Bank Transfer</SelectItem>
+                    <SelectItem value="koko">Koko</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="space-y-2 pt-2">
                 <Button 
-                  className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold py-5 rounded-xl shadow-md"
+                  className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-bold py-5 rounded-xl shadow-lg"
+                  onClick={handleConfirmSettle}
+                  disabled={isProcessingSettle}
+                >
+                  <CheckCircle2 className="w-5 h-5 mr-2" />
+                  {isProcessingSettle ? 'Saving...' : 'Mark Completed (Delivered) 🎉'}
+                </Button>
+
+                <Button 
+                  variant="outline"
+                  className="w-full border-blue-500/50 bg-blue-600/20 hover:bg-blue-600 hover:text-white text-cyan-300 font-bold py-5 rounded-xl shadow-md"
                   onClick={() => {
                     const j = settlingJob;
                     setSettlingJob(null);
                     loadJobIntoQuickBilling(j);
                   }}
                 >
-                  <Receipt className="w-4 h-4 mr-2" /> Load to Final Billing Checkout
+                  <Receipt className="w-4 h-4 mr-2" /> Convert to Final Bill & Print Receipt 🧾
                 </Button>
 
-                <div className="flex gap-2 pt-1">
-                  <Button 
-                    variant="outline" 
-                    className="flex-1 border-white/20 text-white"
-                    onClick={() => setSettlingJob(null)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button 
-                    variant="outline"
-                    className="flex-1 border-emerald-500/40 text-emerald-300 hover:bg-emerald-600 hover:text-white"
-                    onClick={handleConfirmSettle}
-                    disabled={isProcessingSettle}
-                  >
-                    {isProcessingSettle ? 'Saving...' : 'Mark Completed Only'}
-                  </Button>
-                </div>
+                <Button 
+                  variant="ghost" 
+                  className="w-full text-gray-400 hover:text-white"
+                  onClick={() => setSettlingJob(null)}
+                >
+                  Cancel
+                </Button>
               </div>
             </CardContent>
           </Card>
