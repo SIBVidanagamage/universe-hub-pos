@@ -25,6 +25,12 @@ export const SalesProvider = ({ children }) => {
         setLoadingStats(true);
 
         try {
+            // Fetch products to enrich sale_items with actual names and categories
+            const { data: productsData } = await supabase
+                .from('products')
+                .select('id, name, category, cost_price, selling_price, sku');
+            const productsMap = (productsData || []).reduce((acc, p) => ({ ...acc, [p.id]: p }), {});
+
             const { data: salesDataRaw, error } = await supabase
                 .from('sales')
                 .select('*, sale_items(*), customers(name), users(name)')
@@ -32,16 +38,34 @@ export const SalesProvider = ({ children }) => {
 
             if (error) throw error;
             
-            const salesData = (salesDataRaw || []).map(sale => ({
-                ...sale,
-                created_at: sale.created_at || new Date().toISOString(),
-                customer_name: sale.customers ? sale.customers.name : 'Walk-in Customer',
-                user: sale.users || { name: 'Cashier' },
-                items: (sale.sale_items || []).map(item => ({
-                    ...item,
-                    saleable: { name: item.saleable_type?.includes('Product') ? 'Product #' + item.saleable_id : 'Bundle #' + item.saleable_id }
-                }))
-            }));
+            const salesData = (salesDataRaw || []).map(sale => {
+                const enrichedItems = (sale.sale_items || []).map(item => {
+                    const prod = item.saleable_type?.includes('Product') ? productsMap[item.saleable_id] : null;
+                    const isRepair = prod?.category?.toLowerCase() === 'repair' || 
+                                     prod?.name?.toLowerCase().includes('repair') || 
+                                     prod?.sku?.startsWith('REP-') ||
+                                     item.saleable_type?.includes('Repair');
+                    return {
+                        ...item,
+                        isRepair: Boolean(isRepair),
+                        saleable: prod || { 
+                            name: item.saleable_type?.includes('Product') ? 'Product #' + item.saleable_id : 'Bundle #' + item.saleable_id,
+                            category: isRepair ? 'Repair' : 'General'
+                        }
+                    };
+                });
+
+                const isRepairSale = enrichedItems.some(i => i.isRepair);
+
+                return {
+                    ...sale,
+                    created_at: sale.created_at || new Date().toISOString(),
+                    customer_name: sale.customers ? sale.customers.name : (sale.customer_name || 'Walk-in Customer'),
+                    user: sale.users || { name: 'Cashier' },
+                    isRepair: isRepairSale,
+                    items: enrichedItems
+                };
+            });
             
             setSales(salesData);
 
@@ -135,6 +159,10 @@ export const SalesProvider = ({ children }) => {
             if (item.type === 'product' && productsMap[item.id]) {
                 const p = productsMap[item.id];
                 const costPrice = parseFloat(p.cost_price || 0);
+                const profitPerUnit = itemSellingPrice - costPrice;
+                totalProfit += (profitPerUnit * qty);
+            } else if (item.type === 'repair') {
+                const costPrice = parseFloat(item.costPrice || 0);
                 const profitPerUnit = itemSellingPrice - costPrice;
                 totalProfit += (profitPerUnit * qty);
             } else if (item.type === 'bundle' && bundlesMap[item.id]) {
@@ -248,12 +276,48 @@ export const SalesProvider = ({ children }) => {
     const deleteSale = async (saleId) => {
         if (!token) throw new Error("Not authenticated");
 
-        const { error } = await supabase.from('sales').delete().eq('id', saleId);
+        try {
+            // First delete associated sale_items to respect foreign keys
+            await supabase.from('sale_items').delete().eq('sale_id', saleId);
+            const { error } = await supabase.from('sales').delete().eq('id', saleId);
+            if (error) throw error;
+
+            // Refetch all data to ensure dashboard and reports are up-to-date
+            await fetchAllData(token);
+            toast({ title: "Success", description: `Sale #${saleId} has been deleted.` });
+        } catch (err) {
+            console.error("Failed to delete sale:", err);
+            throw err;
+        }
+    };
+
+    const updateSaleCost = async (saleId, newTotalCost, explicitProfit = null) => {
+        if (!token) throw new Error("Not authenticated");
+        
+        const targetSale = sales.find(s => s.id === saleId);
+        if (!targetSale) throw new Error("Sale not found");
+
+        const parsedCost = parseFloat(newTotalCost) || 0;
+        const total = parseFloat(targetSale.total || 0);
+        const newProfit = explicitProfit !== null ? parseFloat(explicitProfit) : (total - parsedCost);
+
+        const { error } = await supabase.from('sales').update({
+            profit: newProfit
+        }).eq('id', saleId);
+
         if (error) throw error;
 
-        // Refetch all data to ensure dashboard and reports are up-to-date
+        // Also if any sale item corresponds to a repair product, update its cost_price
+        try {
+            if (targetSale.items && targetSale.items.length === 1 && targetSale.items[0].saleable_id) {
+                await supabase.from('products').update({ cost_price: parsedCost }).eq('id', targetSale.items[0].saleable_id);
+            }
+        } catch (prodErr) {
+            // non-fatal
+        }
+
         await fetchAllData(token);
-        toast({ title: "Success", description: `Sale #${saleId} has been deleted and items have been restocked.` });
+        toast({ title: "Cost & Profit Updated", description: `Sale #${saleId}: Part Cost LKR ${parsedCost.toFixed(2)} | Profit LKR ${newProfit.toFixed(2)}` });
     };
 
     const resetDailyCash = () => {
@@ -269,6 +333,7 @@ export const SalesProvider = ({ children }) => {
         loadingStats,
         addSale,
         deleteSale, // Expose the new delete function
+        updateSaleCost,
         resetDailyCash,
     };
 
@@ -291,6 +356,7 @@ export const useSales = () => {
             loadingStats: true,
             addSale: async () => {},
             deleteSale: async () => {}, // Provide default
+            updateSaleCost: async () => {},
             resetDailyCash: () => {},
         };
     }

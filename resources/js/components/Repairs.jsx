@@ -32,7 +32,10 @@ import {
   DollarSign, 
   SlidersHorizontal,
   Layers,
-  Sparkles
+  Sparkles,
+  Edit3,
+  XCircle,
+  AlertTriangle
 } from 'lucide-react';
 import { supabase, webSupabase } from '@/lib/supabase';
 
@@ -73,6 +76,7 @@ export function Repairs() {
     physicalCondition: '',
     accessories: '',
     estimatedCost: '',
+    costPrice: '', // Shop Part / Material Cost
     advancePaid: '',
     advancePaymentMethod: 'cash',
     expectedDate: '',
@@ -85,6 +89,18 @@ export function Repairs() {
   const [settlingJob, setSettlingJob] = useState(null);
   const [settlePaymentMethod, setSettlePaymentMethod] = useState('cash');
   const [isProcessingSettle, setIsProcessingSettle] = useState(false);
+
+  // Edit Cost & Price Modal State
+  const [editingCostJob, setEditingCostJob] = useState(null);
+  const [costForm, setCostForm] = useState({ sellingPrice: '', costPrice: '', advancePaid: '' });
+  const [isSavingCost, setIsSavingCost] = useState(false);
+
+  // Delete Job Confirmation Modal State
+  const [jobToDelete, setJobToDelete] = useState(null);
+  const [isDeletingJob, setIsDeletingJob] = useState(false);
+
+  // Quick Billing search by tracking code
+  const [quickSearchTracking, setQuickSearchTracking] = useState('');
 
   // ==========================================
   // STATE: Direct Billing Cart (Original Flow)
@@ -184,6 +200,47 @@ export function Repairs() {
   }, [intakeForm.customerPhone]);
 
   // ==========================================
+  // HELPERS: Packed Details & Financial Parsing
+  // ==========================================
+  const getJobDetails = (jobData = {}) => {
+    const desc = jobData.issue_description || '';
+    const passcodeMatch = desc.match(/\[Passcode:\s*([^\]]+)\]/);
+    const condMatch = desc.match(/\[Cond:\s*([^\]]+)\]/);
+    const accMatch = desc.match(/\[Acc:\s*([^\]]+)\]/);
+    const advMatch = desc.match(/\[Adv Paid:\s*LKR\s*([0-9.]+)\]/);
+    const costMatch = desc.match(/\[Cost:\s*LKR\s*([0-9.]+)\]/);
+
+    const passcode = jobData.passcode || (passcodeMatch ? passcodeMatch[1] : '');
+    const physicalCondition = jobData.physical_condition || (condMatch ? condMatch[1] : '');
+    const accessories = jobData.accessories || (accMatch ? accMatch[1] : '');
+    const estCost = parseFloat(jobData.estimated_cost) || 0;
+    const advPaid = parseFloat(jobData.advance_paid) || (advMatch ? parseFloat(advMatch[1]) : 0);
+    const costPrice = jobData.cost_price !== undefined && jobData.cost_price !== null ? parseFloat(jobData.cost_price) : (costMatch ? parseFloat(costMatch[1]) : 0);
+    const balance = Math.max(0, estCost - advPaid);
+    const profit = Math.max(0, estCost - costPrice);
+
+    const cleanDesc = desc
+      .replace(/\[Passcode:\s*[^\]]+\]/g, '')
+      .replace(/\[Cond:\s*[^\]]+\]/g, '')
+      .replace(/\[Acc:\s*[^\]]+\]/g, '')
+      .replace(/\[Adv Paid:\s*[^\]]+\]/g, '')
+      .replace(/\[Cost:\s*[^\]]+\]/g, '')
+      .trim();
+
+    return {
+      passcode,
+      physicalCondition,
+      accessories,
+      estCost,
+      advPaid,
+      costPrice,
+      balance,
+      profit,
+      cleanDesc
+    };
+  };
+
+  // ==========================================
   // PRINTING HELPERS (Dual Slips & Direct Fallback)
   // ==========================================
   const printViaBrowser = (htmlContent) => {
@@ -204,26 +261,14 @@ export function Repairs() {
       hour: '2-digit', minute: '2-digit', hour12: true
     });
 
-    // Extract packed fields if reloaded from Supabase
-    const passcodeMatch = (jobData.issue_description || '').match(/\[Passcode:\s*([^\]]+)\]/);
-    const condMatch = (jobData.issue_description || '').match(/\[Cond:\s*([^\]]+)\]/);
-    const accMatch = (jobData.issue_description || '').match(/\[Acc:\s*([^\]]+)\]/);
-    const advMatch = (jobData.issue_description || '').match(/\[Adv Paid:\s*LKR\s*([0-9.]+)\]/);
-
-    const passcode = jobData.passcode || (passcodeMatch ? passcodeMatch[1] : '');
-    const physicalCondition = jobData.physical_condition || (condMatch ? condMatch[1] : '');
-    const accessories = jobData.accessories || (accMatch ? accMatch[1] : '');
-
-    const cleanIssueDesc = (jobData.issue_description || '')
-      .replace(/\[Passcode:\s*[^\]]+\]/g, '')
-      .replace(/\[Cond:\s*[^\]]+\]/g, '')
-      .replace(/\[Acc:\s*[^\]]+\]/g, '')
-      .replace(/\[Adv Paid:\s*[^\]]+\]/g, '')
-      .trim();
-
-    const estCost = parseFloat(jobData.estimated_cost) || 0;
-    const advPaid = parseFloat(jobData.advance_paid) || (advMatch ? parseFloat(advMatch[1]) : 0);
-    const balance = Math.max(0, estCost - advPaid);
+    const details = getJobDetails(jobData);
+    const passcode = details.passcode;
+    const physicalCondition = details.physicalCondition;
+    const accessories = details.accessories;
+    const cleanIssueDesc = details.cleanDesc;
+    const estCost = details.estCost;
+    const advPaid = details.advPaid;
+    const balance = details.balance;
 
     // SLIP 1: CUSTOMER HANDOVER RECEIPT
     const customerSlipHtml = `
@@ -424,6 +469,7 @@ export function Repairs() {
       const fullName = `${intakeForm.customerTitle} ${intakeForm.customerName}`.trim();
       const estCost = parseFloat(intakeForm.estimatedCost) || 0;
       const advPaid = parseFloat(intakeForm.advancePaid) || 0;
+      const costPrice = parseFloat(intakeForm.costPrice) || 0;
 
       // Pack additional rich details into issue_description so the website displays it
       let fullIssueDesc = intakeForm.issueDescription || '';
@@ -431,6 +477,7 @@ export function Repairs() {
       if (intakeForm.physicalCondition) fullIssueDesc += ` [Cond: ${intakeForm.physicalCondition}]`;
       if (intakeForm.accessories) fullIssueDesc += ` [Acc: ${intakeForm.accessories}]`;
       if (advPaid > 0) fullIssueDesc += ` [Adv Paid: LKR ${advPaid.toFixed(2)}]`;
+      if (costPrice > 0) fullIssueDesc += ` [Cost: LKR ${costPrice.toFixed(2)}]`;
 
       const newJobPayload = {
         id: recordId,
@@ -476,6 +523,7 @@ export function Repairs() {
         physical_condition: intakeForm.physicalCondition,
         accessories: intakeForm.accessories,
         advance_paid: advPaid,
+        cost_price: costPrice,
         expected_date: intakeForm.expectedDate
       };
 
@@ -506,6 +554,7 @@ export function Repairs() {
         physicalCondition: '',
         accessories: '',
         estimatedCost: '',
+        costPrice: '',
         advancePaid: '',
         advancePaymentMethod: 'cash',
         expectedDate: '',
@@ -654,6 +703,165 @@ export function Repairs() {
     } finally {
       setIsProcessingSettle(false);
     }
+  };
+
+  // ==========================================
+  // CANCEL & DELETE JOB
+  // ==========================================
+  const handleCancelJob = async (job) => {
+    try {
+      const { error } = await webSupabase
+        .from('repair_orders')
+        .update({ status: 'Cancelled' })
+        .eq('id', job.id);
+
+      if (error) throw error;
+
+      setRepairJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'Cancelled' } : j));
+      toast({
+        title: "Repair Cancelled 🚫",
+        description: `Job #${job.ticket_number} marked as Cancelled.`,
+      });
+    } catch (err) {
+      toast({ title: "Cancel Failed", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleConfirmDeleteJob = async () => {
+    if (!jobToDelete) return;
+    setIsDeletingJob(true);
+    try {
+      const { error } = await webSupabase
+        .from('repair_orders')
+        .delete()
+        .eq('id', jobToDelete.id);
+
+      if (error) throw error;
+
+      setRepairJobs(prev => prev.filter(j => j.id !== jobToDelete.id));
+      toast({
+        title: "Job Deleted 🗑️",
+        description: `Job #${jobToDelete.ticket_number} deleted permanently.`,
+      });
+      setJobToDelete(null);
+    } catch (err) {
+      toast({ title: "Delete Failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsDeletingJob(false);
+    }
+  };
+
+  // ==========================================
+  // EDIT PART COST & SELLING PRICE MODAL
+  // ==========================================
+  const handleOpenEditCost = (job) => {
+    const details = getJobDetails(job);
+    setEditingCostJob(job);
+    setCostForm({
+      sellingPrice: details.estCost ? details.estCost.toString() : '',
+      costPrice: details.costPrice ? details.costPrice.toString() : '',
+      advancePaid: details.advPaid ? details.advPaid.toString() : ''
+    });
+  };
+
+  const handleSaveCost = async () => {
+    if (!editingCostJob) return;
+    setIsSavingCost(true);
+
+    try {
+      const newPrice = parseFloat(costForm.sellingPrice) || 0;
+      const newCost = parseFloat(costForm.costPrice) || 0;
+      const newAdv = parseFloat(costForm.advancePaid) || 0;
+
+      const details = getJobDetails(editingCostJob);
+      let updatedDesc = details.cleanDesc;
+      if (details.passcode) updatedDesc += ` [Passcode: ${details.passcode}]`;
+      if (details.physicalCondition) updatedDesc += ` [Cond: ${details.physicalCondition}]`;
+      if (details.accessories) updatedDesc += ` [Acc: ${details.accessories}]`;
+      if (newAdv > 0) updatedDesc += ` [Adv Paid: LKR ${newAdv.toFixed(2)}]`;
+      if (newCost > 0) updatedDesc += ` [Cost: LKR ${newCost.toFixed(2)}]`;
+
+      const { error } = await webSupabase
+        .from('repair_orders')
+        .update({
+          estimated_cost: newPrice,
+          issue_description: updatedDesc
+        })
+        .eq('id', editingCostJob.id);
+
+      if (error) throw error;
+
+      setRepairJobs(prev => prev.map(j => {
+        if (j.id === editingCostJob.id) {
+          return {
+            ...j,
+            estimated_cost: newPrice,
+            issue_description: updatedDesc,
+            cost_price: newCost,
+            advance_paid: newAdv
+          };
+        }
+        return j;
+      }));
+
+      const profit = Math.max(0, newPrice - newCost);
+      toast({
+        title: "Cost & Pricing Saved! 💰",
+        description: `Price: LKR ${newPrice.toFixed(2)} | Part Cost: LKR ${newCost.toFixed(2)} | Est. Profit: LKR ${profit.toFixed(2)}.`,
+      });
+
+      setEditingCostJob(null);
+    } catch (err) {
+      toast({ title: "Update Failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsSavingCost(false);
+    }
+  };
+
+  // ==========================================
+  // CONVERT JOB TO QUICK BILLING / FINAL BILL
+  // ==========================================
+  const loadJobIntoQuickBilling = (job) => {
+    const details = getJobDetails(job);
+
+    const parts = (job.customer_name || '').split(' ');
+    let title = 'Mr.';
+    let name = job.customer_name || '';
+    if (['Mr.', 'Mrs.', 'Miss', 'Dr.'].includes(parts[0])) {
+      title = parts[0];
+      name = parts.slice(1).join(' ');
+    }
+
+    setDirectCustomerTitle(title);
+    setDirectCustomerName(name);
+    setDirectCustomerPhone(job.phone || '');
+
+    const deviceTitle = `${job.device_brand || ''} ${job.device_model || 'Device'}`.trim();
+    const itemName = `${deviceTitle} - ${job.issue_type} (#${job.ticket_number})`;
+    const balanceDue = details.balance;
+
+    const newItem = {
+      uniqueCartId: `rep-job-${job.id || Date.now()}`,
+      name: itemName,
+      type: 'repair',
+      repairJobId: job.id,
+      ticketNumber: job.ticket_number,
+      warrantyPeriod: 3,
+      sellingPrice: details.estCost,
+      discount: details.advPaid, // Advance already paid deducted as discount so total due is remaining balance
+      costPrice: details.costPrice, // Preserves part cost for profit calculation
+      quantity: 1,
+      itemCodes: [job.ticket_number]
+    };
+
+    setCart([newItem]);
+    setPaymentCash(balanceDue);
+    setActiveTab('direct');
+
+    toast({
+      title: "Converted to Final Bill! 🧾",
+      description: `Loaded Job #${job.ticket_number}. Total to pay: LKR ${balanceDue.toFixed(2)} (Advance LKR ${details.advPaid.toFixed(2)} deducted).`,
+    });
   };
 
   // ==========================================
@@ -901,7 +1109,8 @@ export function Repairs() {
                   { id: 'diagnostic', label: '🔍 Diagnostic' },
                   { id: 'in-progress', label: '⚙️ In Progress' },
                   { id: 'ready', label: '✅ Ready for Pickup' },
-                  { id: 'completed', label: '🎉 Completed' }
+                  { id: 'completed', label: '🎉 Completed' },
+                  { id: 'cancelled', label: '🚫 Cancelled' }
                 ].map(tab => (
                   <Button
                     key={tab.id}
@@ -920,24 +1129,14 @@ export function Repairs() {
           {/* Repair Jobs Cards (Mobile-Responsive Grid) */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredJobs.map(job => {
-              // Extract passcode & extra info if packed into issue_description
-              const passcodeMatch = (job.issue_description || '').match(/\[Passcode:\s*([^\]]+)\]/);
-              const extractedPasscode = passcodeMatch ? passcodeMatch[1] : '';
-              
-              const cleanDesc = (job.issue_description || '')
-                .replace(/\[Passcode:\s*[^\]]+\]/g, '')
-                .replace(/\[Cond:\s*[^\]]+\]/g, '')
-                .replace(/\[Acc:\s*[^\]]+\]/g, '')
-                .replace(/\[Adv Paid:\s*[^\]]+\]/g, '')
-                .trim();
-
-              const estCost = parseFloat(job.estimated_cost) || 0;
+              const details = getJobDetails(job);
               const isCompleted = (job.status || '').toLowerCase().includes('complete');
+              const isCancelled = (job.status || '').toLowerCase().includes('cancel');
 
               return (
                 <Card 
                   key={job.id} 
-                  className={`glass-effect border-white/10 hover:border-white/25 transition-all shadow-lg flex flex-col justify-between ${isCompleted ? 'opacity-70' : ''}`}
+                  className={`glass-effect border-white/10 hover:border-white/25 transition-all shadow-lg flex flex-col justify-between ${isCompleted ? 'opacity-75' : ''} ${isCancelled ? 'opacity-60 border-rose-500/20' : ''}`}
                 >
                   <CardHeader className="p-4 pb-2">
                     <div className="flex items-start justify-between gap-2">
@@ -966,26 +1165,62 @@ export function Repairs() {
                           🔧 Fault: {job.issue_type}
                         </span>
                         <p className="text-gray-300 line-clamp-2">
-                          {cleanDesc || 'Standard inspection and repair.'}
+                          {details.cleanDesc || 'Standard inspection and repair.'}
                         </p>
                       </div>
 
                       {/* Passcode Pill (Super useful for technician on mobile!) */}
-                      {extractedPasscode && (
+                      {details.passcode && (
                         <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs">
                           <span className="text-amber-300 font-medium flex items-center gap-1.5">
                             <Lock className="w-3.5 h-3.5" /> Lock Code:
                           </span>
                           <span className="font-mono font-bold text-amber-200">
-                            {extractedPasscode}
+                            {details.passcode}
                           </span>
                         </div>
                       )}
 
-                      {/* Est. Cost */}
-                      <div className="flex items-center justify-between text-xs text-gray-300 pt-1">
-                        <span>Est. Cost:</span>
-                        <span className="font-bold text-white">LKR {estCost.toFixed(2)}</span>
+                      {/* Financial Box: Cost, Price & Profit Tracking */}
+                      <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 space-y-1.5 text-xs">
+                        <div className="flex items-center justify-between text-gray-300">
+                          <span>Est. Customer Price:</span>
+                          <span className="font-bold text-white text-sm">LKR {details.estCost.toFixed(2)}</span>
+                        </div>
+                        {details.advPaid > 0 && (
+                          <div className="flex items-center justify-between text-emerald-400">
+                            <span>Advance Paid:</span>
+                            <span className="font-semibold">LKR {details.advPaid.toFixed(2)}</span>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between text-rose-300 font-semibold">
+                          <span>Balance Due:</span>
+                          <span>LKR {details.balance.toFixed(2)}</span>
+                        </div>
+                        <div className="border-t border-white/10 pt-1.5 flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-gray-400">Part Cost:</span>
+                            <span className="font-semibold text-amber-300">
+                              {details.costPrice > 0 ? `LKR ${details.costPrice.toFixed(2)}` : 'Not set'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-gray-400">Est. Profit:</span>
+                            <span className={`font-bold ${details.profit > 0 ? 'text-emerald-400' : 'text-gray-400'}`}>
+                              LKR {details.profit.toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="pt-1 flex justify-end">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 text-[11px] text-cyan-300 hover:text-white hover:bg-white/10 p-1 flex items-center gap-1"
+                            onClick={() => handleOpenEditCost(job)}
+                          >
+                            <Edit3 className="w-3 h-3" /> Edit Cost & Price
+                          </Button>
+                        </div>
                       </div>
                     </div>
 
@@ -1101,13 +1336,34 @@ export function Repairs() {
                         </Button>
                       </div>
 
-                      <div className="flex justify-end pt-0.5">
+                      {/* Card Footer: Cancel, Delete & Customer Bill Link */}
+                      <div className="flex items-center justify-between pt-2 border-t border-white/10 text-xs">
+                        <div className="flex items-center gap-2">
+                          {!isCancelled && (
+                            <button
+                              type="button"
+                              className="text-[11px] text-rose-400/80 hover:text-rose-300 transition-colors flex items-center gap-1 cursor-pointer"
+                              onClick={() => handleCancelJob(job)}
+                              title="Mark repair as Cancelled"
+                            >
+                              <XCircle className="w-3 h-3" /> Cancel Job
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="text-[11px] text-gray-500 hover:text-red-400 transition-colors flex items-center gap-1 cursor-pointer"
+                            onClick={() => setJobToDelete(job)}
+                            title="Delete repair job"
+                          >
+                            <Trash2 className="w-3 h-3" /> Delete
+                          </button>
+                        </div>
                         <button
                           type="button"
                           className="text-[11px] text-gray-400 hover:text-cyan-300 transition-colors flex items-center gap-1 cursor-pointer"
                           onClick={() => handlePrintSlips(job, 'customer')}
                         >
-                          <FileText className="w-3 h-3" /> Print Customer Bill
+                          <FileText className="w-3 h-3" /> Customer Slip
                         </button>
                       </div>
                     </div>
@@ -1355,11 +1611,11 @@ export function Repairs() {
               {/* Section 4: Pricing & Expected Time */}
               <div className="space-y-3 p-4 rounded-2xl bg-white/5 border border-white/10">
                 <h3 className="text-sm font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-2">
-                  <DollarSign className="w-4 h-4" /> 4. Pricing & Delivery Time
+                  <DollarSign className="w-4 h-4" /> 4. Pricing, Part Cost & Delivery Time
                 </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                   <div>
-                    <Label htmlFor="estCost">Estimated Total Cost (LKR)</Label>
+                    <Label htmlFor="estCost">Customer Price (LKR) *</Label>
                     <Input
                       id="estCost"
                       type="number"
@@ -1368,6 +1624,20 @@ export function Repairs() {
                       value={intakeForm.estimatedCost}
                       onChange={e => setIntakeForm({ ...intakeForm, estimatedCost: e.target.value })}
                       className="bg-white/10 border-white/20 text-white mt-1 font-semibold"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="costPrice" className="text-amber-300">Part / Item Cost (LKR)</Label>
+                    <Input
+                      id="costPrice"
+                      type="number"
+                      step="0.01"
+                      placeholder="e.g. 8000.00"
+                      value={intakeForm.costPrice}
+                      onChange={e => setIntakeForm({ ...intakeForm, costPrice: e.target.value })}
+                      className="bg-white/10 border-amber-500/30 text-white mt-1 font-semibold"
                     />
                   </div>
 
@@ -1385,7 +1655,7 @@ export function Repairs() {
                   </div>
 
                   <div>
-                    <Label>Advance Payment Method</Label>
+                    <Label>Advance Method</Label>
                     <Select 
                       value={intakeForm.advancePaymentMethod} 
                       onValueChange={v => setIntakeForm({ ...intakeForm, advancePaymentMethod: v })}
@@ -1433,12 +1703,20 @@ export function Repairs() {
                   </div>
                 </div>
 
-                {/* Balance Preview */}
-                <div className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/10 text-sm mt-2">
-                  <span className="text-gray-300">Calculated Balance Due on Pickup:</span>
-                  <span className="font-bold text-lg text-rose-400">
-                    LKR {(Math.max(0, (parseFloat(intakeForm.estimatedCost) || 0) - (parseFloat(intakeForm.advancePaid) || 0))).toFixed(2)}
-                  </span>
+                {/* Profit & Balance Real-time Preview */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl bg-white/5 border border-white/10 text-sm mt-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-300">Estimated Net Profit (Price - Part Cost):</span>
+                    <span className="font-bold text-base text-emerald-400">
+                      LKR {(Math.max(0, (parseFloat(intakeForm.estimatedCost) || 0) - (parseFloat(intakeForm.costPrice) || 0))).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-300">Calculated Balance Due on Pickup:</span>
+                    <span className="font-bold text-base text-rose-400">
+                      LKR {(Math.max(0, (parseFloat(intakeForm.estimatedCost) || 0) - (parseFloat(intakeForm.advancePaid) || 0))).toFixed(2)}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -1464,6 +1742,56 @@ export function Repairs() {
       {activeTab === 'direct' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
+            {/* Quick Load By Tracking Code Bar */}
+            <Card className="glass-effect border-blue-500/30 bg-blue-500/5 shadow-md">
+              <CardContent className="p-3">
+                <div className="flex flex-col sm:flex-row items-center gap-2">
+                  <span className="text-xs font-bold text-cyan-300 whitespace-nowrap flex items-center gap-1.5">
+                    <Receipt className="w-4 h-4 text-cyan-400" />
+                    Load Job by Tracking #:
+                  </span>
+                  <div className="relative flex-1 w-full">
+                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-gray-400" />
+                    <Input
+                      placeholder="Enter Tracking ID (e.g. UH-8309)..."
+                      value={quickSearchTracking}
+                      onChange={e => setQuickSearchTracking(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const q = quickSearchTracking.trim().toLowerCase();
+                          if (!q) return;
+                          const found = repairJobs.find(j => (j.ticket_number || '').toLowerCase() === q || (j.ticket_number || '').toLowerCase().includes(q));
+                          if (found) {
+                            loadJobIntoQuickBilling(found);
+                          } else {
+                            toast({ title: "Job Not Found", description: `Could not find any job with tracking #${quickSearchTracking}.`, variant: "destructive" });
+                          }
+                        }
+                      }}
+                      className="pl-8 h-8 text-xs bg-white/10 border-white/20 text-white w-full font-mono uppercase"
+                    />
+                  </div>
+                  <Button
+                    size="sm"
+                    className="h-8 text-xs bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold shrink-0"
+                    onClick={() => {
+                      const q = quickSearchTracking.trim().toLowerCase();
+                      if (!q) return;
+                      const found = repairJobs.find(j => (j.ticket_number || '').toLowerCase() === q || (j.ticket_number || '').toLowerCase().includes(q));
+                      if (found) {
+                        loadJobIntoQuickBilling(found);
+                      } else {
+                        toast({ title: "Job Not Found", description: `Could not find any job with tracking #${quickSearchTracking}.`, variant: "destructive" });
+                      }
+                    }}
+                  >
+                    Load & Convert to Bill 🚀
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
             <Card className="glass-effect border-white/10 shadow-xl">
               <CardHeader><CardTitle className="text-2xl text-white">Add Direct Repair Item</CardTitle></CardHeader>
               <CardContent>
@@ -1517,7 +1845,7 @@ export function Repairs() {
                       />
                     </div>
                     <div>
-                      <Label htmlFor="repairCost">c (LKR Cost)</Label>
+                      <Label htmlFor="repairCost">Part Cost (LKR)</Label>
                       <Input 
                         id="repairCost" 
                         type="number"
@@ -1759,6 +2087,148 @@ export function Repairs() {
                   onClick={() => setSettlingJob(null)}
                 >
                   Cancel
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL: EDIT PART COST & PRICING                          */}
+      {/* ======================================================== */}
+      {editingCostJob && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <Card className="glass-effect border-white/20 w-full max-w-md shadow-2xl animate-in fade-in zoom-in-95">
+            <CardHeader>
+              <CardTitle className="text-xl text-white flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-cyan-400" />
+                Update Cost & Pricing
+              </CardTitle>
+              <CardDescription className="text-gray-300">
+                Job #{editingCostJob.ticket_number} • {editingCostJob.device_brand} {editingCostJob.device_model}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-3">
+                <div>
+                  <Label htmlFor="editSellingPrice">Customer Selling Price (LKR)</Label>
+                  <Input
+                    id="editSellingPrice"
+                    type="number"
+                    step="0.01"
+                    value={costForm.sellingPrice}
+                    onChange={e => setCostForm({ ...costForm, sellingPrice: e.target.value })}
+                    className="bg-white/10 border-white/20 text-white mt-1 font-semibold"
+                    placeholder="0.00"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="editCostPrice" className="text-amber-300 font-semibold">
+                    Part / Material Cost (LKR)
+                  </Label>
+                  <Input
+                    id="editCostPrice"
+                    type="number"
+                    step="0.01"
+                    value={costForm.costPrice}
+                    onChange={e => setCostForm({ ...costForm, costPrice: e.target.value })}
+                    className="bg-white/10 border-amber-500/40 text-white mt-1 font-semibold"
+                    placeholder="e.g. 8000.00 (Wholesale display/part cost)"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="editAdvPaid">Advance Paid (LKR)</Label>
+                  <Input
+                    id="editAdvPaid"
+                    type="number"
+                    step="0.01"
+                    value={costForm.advancePaid}
+                    onChange={e => setCostForm({ ...costForm, advancePaid: e.target.value })}
+                    className="bg-white/10 border-white/20 text-white mt-1 font-semibold text-emerald-300"
+                    placeholder="0.00"
+                  />
+                </div>
+
+                {/* Calculation preview */}
+                <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-1.5 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Est. Profit (Price - Part Cost):</span>
+                    <span className="font-bold text-emerald-400 text-sm">
+                      LKR {(Math.max(0, (parseFloat(costForm.sellingPrice) || 0) - (parseFloat(costForm.costPrice) || 0))).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Balance Due on Pickup:</span>
+                    <span className="font-bold text-rose-400 text-sm">
+                      LKR {(Math.max(0, (parseFloat(costForm.sellingPrice) || 0) - (parseFloat(costForm.advancePaid) || 0))).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-2">
+                <Button 
+                  className="w-full bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-bold py-5 rounded-xl shadow-lg"
+                  onClick={handleSaveCost}
+                  disabled={isSavingCost}
+                >
+                  <DollarSign className="w-4 h-4 mr-2" />
+                  {isSavingCost ? 'Saving...' : 'Save Cost & Pricing'}
+                </Button>
+
+                <Button 
+                  variant="ghost" 
+                  className="w-full text-gray-400 hover:text-white"
+                  onClick={() => setEditingCostJob(null)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL: DELETE REPAIR JOB CONFIRMATION                   */}
+      {/* ======================================================== */}
+      {jobToDelete && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <Card className="glass-effect border-rose-500/30 w-full max-w-md shadow-2xl animate-in fade-in zoom-in-95">
+            <CardHeader>
+              <CardTitle className="text-xl text-rose-400 flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-rose-400" />
+                Delete Repair Job?
+              </CardTitle>
+              <CardDescription className="text-gray-300 pt-1">
+                Are you sure you want to permanently delete repair job <strong className="text-white">#{jobToDelete.ticket_number}</strong> ({jobToDelete.device_brand} {jobToDelete.device_model})?
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-xs text-rose-200/80 bg-rose-500/10 p-3 rounded-xl border border-rose-500/20">
+                ⚠️ This will permanently remove the repair record from the system and web tracking. This action cannot be undone.
+              </p>
+
+              <div className="flex gap-2 justify-end pt-2">
+                <Button 
+                  variant="outline"
+                  className="border-white/20 text-white hover:bg-white/10"
+                  onClick={() => setJobToDelete(null)}
+                  disabled={isDeletingJob}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  variant="destructive"
+                  className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
+                  onClick={handleConfirmDeleteJob}
+                  disabled={isDeletingJob}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  {isDeletingJob ? 'Deleting...' : 'Yes, Delete Job'}
                 </Button>
               </div>
             </CardContent>

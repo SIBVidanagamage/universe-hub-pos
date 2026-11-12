@@ -45,13 +45,12 @@ function AppLayout() {
         <div className="flex flex-col md:flex-row h-screen bg-cosmic-bg relative overflow-hidden text-white font-sans">
             <Starfield />
             {/* Cosmic Ambient Background Elements */}
-            <div className="absolute top-[-20%] left-[-10%] w-[60vw] h-[60vw] bg-cosmic-blue/20 rounded-full mix-blend-screen filter blur-[150px] opacity-30 animate-pulse-glow pointer-events-none z-0"></div>
-            <div className="absolute bottom-[-20%] right-[-10%] w-[60vw] h-[60vw] bg-cosmic-purple/20 rounded-full mix-blend-screen filter blur-[150px] opacity-30 animate-pulse-glow pointer-events-none z-0" style={{ animationDelay: '2s' }}></div>
+            <div className="absolute top-[-20%] left-[-10%] w-[60vw] h-[60vw] bg-cosmic-blue/15 rounded-full mix-blend-screen filter blur-[50px] opacity-25 pointer-events-none z-0"></div>
+            <div className="absolute bottom-[-20%] right-[-10%] w-[60vw] h-[60vw] bg-cosmic-purple/15 rounded-full mix-blend-screen filter blur-[50px] opacity-25 pointer-events-none z-0"></div>
 
             {/* Abstract Orbit Rings */}
-            <div className="absolute top-[50%] left-[50%] w-[150vw] h-[150vw] -translate-x-1/2 -translate-y-1/2 border-[1px] border-white/[0.02] rounded-full pointer-events-none z-0"></div>
-            <div className="absolute top-[50%] left-[50%] w-[120vw] h-[120vw] -translate-x-1/2 -translate-y-1/2 border-[1px] border-white/[0.03] rounded-full pointer-events-none z-0 animate-orbit"></div>
-            <div className="absolute top-[50%] left-[50%] w-[90vw] h-[90vw] -translate-x-1/2 -translate-y-1/2 border-[1px] border-white/[0.04] rounded-full pointer-events-none z-0 animate-orbit" style={{ animationDirection: 'reverse', animationDuration: '120s' }}></div>
+            <div className="absolute top-[50%] left-[50%] w-[120vw] h-[120vw] -translate-x-1/2 -translate-y-1/2 border-[1px] border-white/[0.02] rounded-full pointer-events-none z-0"></div>
+            <div className="absolute top-[50%] left-[50%] w-[90vw] h-[90vw] -translate-x-1/2 -translate-y-1/2 border-[1px] border-white/[0.03] rounded-full pointer-events-none z-0"></div>
 
             {/* Mobile Header (visible only on mobile) */}
             <div className="md:hidden flex items-center justify-between p-3 bg-slate-900/90 backdrop-blur-md border-b border-white/10 z-30 relative">

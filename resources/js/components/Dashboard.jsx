@@ -109,7 +109,7 @@ export function Dashboard() {
             </CardHeader>
             <CardContent className="h-[300px]">
                 {stats?.chartData && stats.chartData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveContainer width="100%" height={260} minHeight={200}>
                         <LineChart data={stats.chartData}>
                             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
                             <XAxis dataKey="date" stroke="rgba(255,255,255,0.5)" tick={{fill: 'rgba(255,255,255,0.5)', fontSize: 12}} />
